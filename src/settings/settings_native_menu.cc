@@ -1,5 +1,6 @@
 #include "../common.h"
 #include "../hooks/reading_view.h"
+#include "settings.h"
 
 #include <QAction>
 #include <QApplication>
@@ -16,85 +17,85 @@
 #include <QWidgetAction>
 
 #include <cstdlib>
-#include <dlfcn.h>
 #include <functional>
 
 namespace {
 
 constexpr const char* kTriggerPath = DATA_DIR "/open-settings";
 constexpr const char* kSettingsPath = DATA_DIR "/settings.ini";
+constexpr int kSubmenuDelayMs = 120;
+constexpr int kNickelMenuCloseDelayMs = 300;
 
 typedef QWidget MenuTextItem;
 typedef QMenu NickelTouchMenu;
-typedef int DecorationPosition;
-
-using NickelTouchMenuCtor = void (*)(NickelTouchMenu*, QWidget*, DecorationPosition);
-using MenuTextItemCtor = void (*)(MenuTextItem*, QWidget*, bool, bool);
-using MenuTextItemSetText = void (*)(MenuTextItem*, const QString&);
-using MenuTextItemRegisterForTapGestures = void (*)(MenuTextItem*);
-
-NickelTouchMenuCtor pNickelTouchMenuCtor = nullptr;
-MenuTextItemCtor pMenuTextItemCtor = nullptr;
-MenuTextItemSetText pMenuTextItemSetText = nullptr;
-MenuTextItemRegisterForTapGestures pMenuTextItemRegisterForTapGestures = nullptr;
 
 QFileSystemWatcher* gWatcher = nullptr;
+bool gMissingSymbolsReported = false;
 
 struct WidgetChoice {
-    const char* value;
+    WidgetTypeEnum value;
     const char* label;
 };
 
 const WidgetChoice kWidgetChoices[] = {
-    {"Clock",           "Reloj"},
-    {"Battery",         "Batería"},
-    {"ChapterTitle",    "Título capítulo"},
-    {"ChapterPage",     "Página capítulo"},
-    {"ChapterProgress", "Progreso capítulo"},
-    {"ChapterTime",     "Tiempo capítulo"},
-    {"BookTitle",       "Título libro"},
-    {"BookPage",        "Página libro"},
-    {"BookProgress",    "Progreso libro"},
-    {"BookTime",        "Tiempo libro"},
+    {WidgetTypeEnum::Clock,           "Reloj"},
+    {WidgetTypeEnum::Battery,         "Batería"},
+    {WidgetTypeEnum::ChapterTitle,    "Título capítulo"},
+    {WidgetTypeEnum::ChapterPage,     "Página capítulo"},
+    {WidgetTypeEnum::ChapterProgress, "Progreso capítulo"},
+    {WidgetTypeEnum::ChapterTime,     "Tiempo capítulo"},
+    {WidgetTypeEnum::BookTitle,       "Título libro"},
+    {WidgetTypeEnum::BookPage,        "Página libro"},
+    {WidgetTypeEnum::BookProgress,    "Progreso libro"},
+    {WidgetTypeEnum::BookTime,        "Tiempo libro"},
 };
 
-const QString kHeaderLeftKey   = QStringLiteral("Reading.Widget/HeaderLeft");
-const QString kHeaderCenterKey = QStringLiteral("Reading.Widget/HeaderCenter");
-const QString kHeaderRightKey  = QStringLiteral("Reading.Widget/HeaderRight");
-const QString kFooterLeftKey   = QStringLiteral("Reading.Widget/FooterLeft");
-const QString kFooterCenterKey = QStringLiteral("Reading.Widget/FooterCenter");
-const QString kFooterRightKey  = QStringLiteral("Reading.Widget/FooterRight");
+const QString kHeaderLeftKey   = QString::fromLatin1(SettingsKeys::ReadingWidgetHeaderLeft);
+const QString kHeaderCenterKey = QString::fromLatin1(SettingsKeys::ReadingWidgetHeaderCenter);
+const QString kHeaderRightKey  = QString::fromLatin1(SettingsKeys::ReadingWidgetHeaderRight);
+const QString kFooterLeftKey   = QString::fromLatin1(SettingsKeys::ReadingWidgetFooterLeft);
+const QString kFooterCenterKey = QString::fromLatin1(SettingsKeys::ReadingWidgetFooterCenter);
+const QString kFooterRightKey  = QString::fromLatin1(SettingsKeys::ReadingWidgetFooterRight);
 
 const QList<QString> kAllZoneKeys = {
     kHeaderLeftKey, kHeaderCenterKey, kHeaderRightKey,
     kFooterLeftKey, kFooterCenterKey, kFooterRightKey,
 };
 
-bool resolveSymbols() {
-    if (pNickelTouchMenuCtor && pMenuTextItemCtor && pMenuTextItemSetText && pMenuTextItemRegisterForTapGestures) {
-        return true;
+bool nativeMenuSymbolsAvailable() {
+    return NickelTouchMenu_constructor
+        && MenuTextItem_constructor
+        && MenuTextItem_setText
+        && MenuTextItem_registerForTapGestures;
+}
+
+void reportMissingSymbols() {
+    nh_log("Kobo Tweaks settings menu: missing NickelTouchMenu/MenuTextItem symbols");
+
+    if (!gMissingSymbolsReported && ConfirmationDialogFactory_showOKDialog) {
+        gMissingSymbolsReported = true;
+        ConfirmationDialogFactory_showOKDialog(
+            QStringLiteral("Kobo Tweaks"),
+            QStringLiteral("El menú nativo de ajustes no es compatible con este firmware. Puedes seguir editando .adds/tweaks/settings.ini manualmente.")
+        );
     }
-
-    reinterpret_cast<void*&>(pNickelTouchMenuCtor) = dlsym(RTLD_DEFAULT, "_ZN15NickelTouchMenuC2EP7QWidget18DecorationPosition");
-    reinterpret_cast<void*&>(pMenuTextItemCtor) = dlsym(RTLD_DEFAULT, "_ZN12MenuTextItemC1EP7QWidgetbb");
-    reinterpret_cast<void*&>(pMenuTextItemSetText) = dlsym(RTLD_DEFAULT, "_ZN12MenuTextItem7setTextERK7QString");
-    reinterpret_cast<void*&>(pMenuTextItemRegisterForTapGestures) = dlsym(RTLD_DEFAULT, "_ZN12MenuTextItem22registerForTapGesturesEv");
-
-    return pNickelTouchMenuCtor && pMenuTextItemCtor && pMenuTextItemSetText && pMenuTextItemRegisterForTapGestures;
 }
 
 NickelTouchMenu* createMenu() {
-    if (!resolveSymbols()) {
-        nh_log("Kobo Tweaks settings menu: missing NickelTouchMenu/MenuTextItem symbols");
+    if (!nativeMenuSymbolsAvailable()) {
+        reportMissingSymbols();
         return nullptr;
     }
 
+    // Match NickelMenu's conservative opaque allocations. These classes are
+    // private Nickel ABI, so we intentionally allocate more than their known
+    // object sizes instead of depending on a firmware-specific C++ layout.
     auto* menu = reinterpret_cast<NickelTouchMenu*>(calloc(1, 512));
     if (!menu) {
         return nullptr;
     }
 
-    pNickelTouchMenuCtor(menu, nullptr, 3);
+    NickelTouchMenu_constructor(menu, nullptr, 3);
     QObject::connect(menu, &QMenu::aboutToHide, menu, &QWidget::deleteLater);
     return menu;
 }
@@ -114,9 +115,9 @@ void addItem(NickelTouchMenu* menu, const QString& label, const std::function<vo
         return;
     }
 
-    pMenuTextItemCtor(mti, menu, false, true);
-    pMenuTextItemSetText(mti, label);
-    pMenuTextItemRegisterForTapGestures(mti);
+    MenuTextItem_constructor(mti, menu, false, true);
+    MenuTextItem_setText(mti, label);
+    MenuTextItem_registerForTapGestures(mti);
 
     auto* action = new QWidgetAction(menu);
     action->setDefaultWidget(mti);
@@ -218,8 +219,9 @@ void removeIgnoreCase(QStringList& values, const QString& needle) {
 }
 
 QString widgetLabel(const QString& value) {
+    const WidgetTypeEnum widget = WidgetTypeSetting::fromString(value, WidgetTypeEnum::Invalid);
     for (const auto& choice : kWidgetChoices) {
-        if (value.compare(QString::fromLatin1(choice.value), Qt::CaseInsensitive) == 0) {
+        if (choice.value == widget) {
             return QString::fromUtf8(choice.label);
         }
     }
@@ -274,32 +276,43 @@ void toggleWidgetInZone(const QString& targetKey, const QString& widget) {
     scheduleRuntimeReload();
 }
 
-QString nextBatteryStyle(const QString& current) {
-    if (current.compare(QStringLiteral("IconLevel"), Qt::CaseInsensitive) == 0) return QStringLiteral("LevelIcon");
-    if (current.compare(QStringLiteral("LevelIcon"), Qt::CaseInsensitive) == 0) return QStringLiteral("Icon");
-    if (current.compare(QStringLiteral("Icon"), Qt::CaseInsensitive) == 0) return QStringLiteral("Level");
-    return QStringLiteral("IconLevel");
+BatteryStyleEnum nextBatteryStyle(BatteryStyleEnum current) {
+    switch (current) {
+        case BatteryStyleEnum::IconLevel: return BatteryStyleEnum::LevelIcon;
+        case BatteryStyleEnum::LevelIcon: return BatteryStyleEnum::Icon;
+        case BatteryStyleEnum::Icon:      return BatteryStyleEnum::Level;
+        case BatteryStyleEnum::Level:     return BatteryStyleEnum::IconLevel;
+        default:                          return BatteryStyleEnum::IconLevel;
+    }
 }
 
-QString batteryStyleLabel(const QString& value) {
-    if (value.compare(QStringLiteral("Icon"), Qt::CaseInsensitive) == 0) return QStringLiteral("Solo icono");
-    if (value.compare(QStringLiteral("Level"), Qt::CaseInsensitive) == 0) return QStringLiteral("Solo porcentaje");
-    if (value.compare(QStringLiteral("LevelIcon"), Qt::CaseInsensitive) == 0) return QStringLiteral("Porcentaje + icono");
-    return QStringLiteral("Icono + porcentaje");
+QString batteryStyleLabel(BatteryStyleEnum value) {
+    switch (value) {
+        case BatteryStyleEnum::Icon:      return QStringLiteral("Solo icono");
+        case BatteryStyleEnum::Level:     return QStringLiteral("Solo porcentaje");
+        case BatteryStyleEnum::LevelIcon: return QStringLiteral("Porcentaje + icono");
+        case BatteryStyleEnum::IconLevel: return QStringLiteral("Icono + porcentaje");
+        default:                          return QStringLiteral("Icono + porcentaje");
+    }
 }
 
-QString separatorLabel(const QString& value) {
-    if (value.isEmpty()) return QStringLiteral("Ninguno");
-    if (value.compare(QStringLiteral("Bullet"), Qt::CaseInsensitive) == 0) return QStringLiteral("Viñeta •");
-    if (value.compare(QStringLiteral("Pipe"), Qt::CaseInsensitive) == 0) return QStringLiteral("Barra |");
-    return QStringLiteral("Punto ·");
+QString separatorLabel(WidgetSeparatorEnum value) {
+    switch (value) {
+        case WidgetSeparatorEnum::Bullet: return QStringLiteral("Viñeta •");
+        case WidgetSeparatorEnum::Dot:    return QStringLiteral("Punto ·");
+        case WidgetSeparatorEnum::Pipe:   return QStringLiteral("Barra |");
+        default:                          return QStringLiteral("Ninguno");
+    }
 }
 
-QString nextSeparator(const QString& current) {
-    if (current.isEmpty()) return QStringLiteral("Bullet");
-    if (current.compare(QStringLiteral("Bullet"), Qt::CaseInsensitive) == 0) return QStringLiteral("Dot");
-    if (current.compare(QStringLiteral("Dot"), Qt::CaseInsensitive) == 0) return QStringLiteral("Pipe");
-    return QString();
+WidgetSeparatorEnum nextSeparator(WidgetSeparatorEnum current) {
+    switch (current) {
+        case WidgetSeparatorEnum::Invalid: return WidgetSeparatorEnum::Bullet;
+        case WidgetSeparatorEnum::Bullet:  return WidgetSeparatorEnum::Dot;
+        case WidgetSeparatorEnum::Dot:     return WidgetSeparatorEnum::Pipe;
+        case WidgetSeparatorEnum::Pipe:    return WidgetSeparatorEnum::Invalid;
+    }
+    return WidgetSeparatorEnum::Invalid;
 }
 
 void showMainMenu();
@@ -309,56 +322,65 @@ void showZonesMenu(bool header);
 void showZoneEditor(const QString& key, const QString& title);
 
 void scheduleMenu(const std::function<void()>& callback) {
-    QTimer::singleShot(120, [callback]() { callback(); });
+    QTimer::singleShot(kSubmenuDelayMs, [callback]() { callback(); });
 }
 
 void showDesignMenu() {
     NickelTouchMenu* menu = createMenu();
     if (!menu) return;
 
-    const int height = readInt(QStringLiteral("Reading/HeaderFooterHeightScale"), 100);
-    addItem(menu, QStringLiteral("Altura cabecera/pie: %1 %").arg(height), [height]() {
+    const QString heightKey = QString::fromLatin1(SettingsKeys::ReadingHeaderFooterHeightScale);
+    const int height = readInt(heightKey, 100);
+    addItem(menu, QStringLiteral("Altura cabecera/pie: %1 %").arg(height), [height, heightKey]() {
         int next = height - 5;
         if (next < 50) next = 100;
-        writeInt(QStringLiteral("Reading/HeaderFooterHeightScale"), next);
+        writeInt(heightKey, next);
         scheduleMenu(showDesignMenu);
     });
 
-    const int margins = readInt(QStringLiteral("Reading/HeaderFooterMargins"), 50);
-    addItem(menu, QStringLiteral("Márgenes laterales: %1").arg(margins), [margins]() {
+    const QString marginsKey = QString::fromLatin1(SettingsKeys::ReadingHeaderFooterMargins);
+    const int margins = readInt(marginsKey, 50);
+    addItem(menu, QStringLiteral("Márgenes laterales: %1").arg(margins), [margins, marginsKey]() {
         int next = margins + 5;
         if (next > 100) next = 0;
-        writeInt(QStringLiteral("Reading/HeaderFooterMargins"), next);
+        writeInt(marginsKey, next);
         scheduleMenu(showDesignMenu);
     });
 
-    const int headerSpacer = readInt(QStringLiteral("Reading/HeaderSpacerHeight"), 0);
-    addItem(menu, QStringLiteral("Espacio superior: %1").arg(headerSpacer), [headerSpacer]() {
+    const QString headerSpacerKey = QString::fromLatin1(SettingsKeys::ReadingHeaderSpacerHeight);
+    const int headerSpacer = readInt(headerSpacerKey, 0);
+    addItem(menu, QStringLiteral("Espacio superior: %1").arg(headerSpacer), [headerSpacer, headerSpacerKey]() {
         int next = headerSpacer + 5;
         if (next > 100) next = 0;
-        writeInt(QStringLiteral("Reading/HeaderSpacerHeight"), next);
+        writeInt(headerSpacerKey, next);
         scheduleMenu(showDesignMenu);
     });
 
-    const int footerSpacer = readInt(QStringLiteral("Reading/FooterSpacerHeight"), 0);
-    addItem(menu, QStringLiteral("Espacio inferior: %1").arg(footerSpacer), [footerSpacer]() {
+    const QString footerSpacerKey = QString::fromLatin1(SettingsKeys::ReadingFooterSpacerHeight);
+    const int footerSpacer = readInt(footerSpacerKey, 0);
+    addItem(menu, QStringLiteral("Espacio inferior: %1").arg(footerSpacer), [footerSpacer, footerSpacerKey]() {
         int next = footerSpacer + 5;
         if (next > 100) next = 0;
-        writeInt(QStringLiteral("Reading/FooterSpacerHeight"), next);
+        writeInt(footerSpacerKey, next);
         scheduleMenu(showDesignMenu);
     });
 
-    const int spacing = readInt(QStringLiteral("Reading.Widget/Spacing"), 10);
-    addItem(menu, QStringLiteral("Espacio widgets: %1").arg(spacing), [spacing]() {
+    const QString spacingKey = QString::fromLatin1(SettingsKeys::ReadingWidgetSpacing);
+    const int spacing = readInt(spacingKey, 10);
+    addItem(menu, QStringLiteral("Espacio widgets: %1").arg(spacing), [spacing, spacingKey]() {
         int next = spacing + 1;
         if (next > 20) next = 0;
-        writeInt(QStringLiteral("Reading.Widget/Spacing"), next);
+        writeInt(spacingKey, next);
         scheduleMenu(showDesignMenu);
     });
 
-    const QString separator = readString(QStringLiteral("Reading.Widget/Separator"), QStringLiteral("Dot"));
-    addItem(menu, QStringLiteral("Separador: %1").arg(separatorLabel(separator)), [separator]() {
-        writeString(QStringLiteral("Reading.Widget/Separator"), nextSeparator(separator));
+    const QString separatorKey = QString::fromLatin1(SettingsKeys::ReadingWidgetSeparator);
+    const WidgetSeparatorEnum separator = WidgetSeparatorSetting::fromString(
+        readString(separatorKey, WidgetSeparatorSetting::toString(WidgetSeparatorEnum::Dot)),
+        WidgetSeparatorEnum::Dot
+    );
+    addItem(menu, QStringLiteral("Separador: %1").arg(separatorLabel(separator)), [separator, separatorKey]() {
+        writeString(separatorKey, WidgetSeparatorSetting::toString(nextSeparator(separator)));
         scheduleMenu(showDesignMenu);
     });
 
@@ -370,23 +392,32 @@ void showBatteryMenu() {
     NickelTouchMenu* menu = createMenu();
     if (!menu) return;
 
-    const int threshold = readInt(QStringLiteral("Reading.Widget.Battery/ShowWhenBelow"), 100);
-    addItem(menu, QStringLiteral("Mostrar por debajo de: %1 %").arg(threshold), [threshold]() {
+    const QString thresholdKey = QString::fromLatin1(SettingsKeys::ReadingWidgetBatteryShowWhenBelow);
+    const int threshold = readInt(thresholdKey, 100);
+    addItem(menu, QStringLiteral("Mostrar por debajo de: %1 %").arg(threshold), [threshold, thresholdKey]() {
         int next = threshold - 10;
         if (next < 10) next = 100;
-        writeInt(QStringLiteral("Reading.Widget.Battery/ShowWhenBelow"), next);
+        writeInt(thresholdKey, next);
         scheduleMenu(showBatteryMenu);
     });
 
-    const QString style = readString(QStringLiteral("Reading.Widget.Battery/Style"), QStringLiteral("IconLevel"));
-    addItem(menu, QStringLiteral("Estilo: %1").arg(batteryStyleLabel(style)), [style]() {
-        writeString(QStringLiteral("Reading.Widget.Battery/Style"), nextBatteryStyle(style));
+    const QString styleKey = QString::fromLatin1(SettingsKeys::ReadingWidgetBatteryStyle);
+    const BatteryStyleEnum style = BatteryStyleSetting::fromString(
+        readString(styleKey, BatteryStyleSetting::toString(BatteryStyleEnum::IconLevel)),
+        BatteryStyleEnum::IconLevel
+    );
+    addItem(menu, QStringLiteral("Estilo: %1").arg(batteryStyleLabel(style)), [style, styleKey]() {
+        writeString(styleKey, BatteryStyleSetting::toString(nextBatteryStyle(style)));
         scheduleMenu(showBatteryMenu);
     });
 
-    const QString charging = readString(QStringLiteral("Reading.Widget.Battery/StyleCharging"), QStringLiteral("IconLevel"));
-    addItem(menu, QStringLiteral("Cargando: %1").arg(batteryStyleLabel(charging)), [charging]() {
-        writeString(QStringLiteral("Reading.Widget.Battery/StyleCharging"), nextBatteryStyle(charging));
+    const QString chargingKey = QString::fromLatin1(SettingsKeys::ReadingWidgetBatteryStyleCharging);
+    const BatteryStyleEnum charging = BatteryStyleSetting::fromString(
+        readString(chargingKey, BatteryStyleSetting::toString(BatteryStyleEnum::IconLevel)),
+        BatteryStyleEnum::IconLevel
+    );
+    addItem(menu, QStringLiteral("Cargando: %1").arg(batteryStyleLabel(charging)), [charging, chargingKey]() {
+        writeString(chargingKey, BatteryStyleSetting::toString(nextBatteryStyle(charging)));
         scheduleMenu(showBatteryMenu);
     });
 
@@ -400,7 +431,7 @@ void showZoneEditor(const QString& key, const QString& title) {
 
     const QStringList selected = readStringList(key);
     for (const auto& choice : kWidgetChoices) {
-        const QString value = QString::fromLatin1(choice.value);
+        const QString value = WidgetTypeSetting::toString(choice.value);
         const bool enabled = containsIgnoreCase(selected, value);
         const QString label = QStringLiteral("%1 %2").arg(enabled ? QStringLiteral("[x]") : QStringLiteral("[ ]"), QString::fromUtf8(choice.label));
         addItem(menu, label, [key, title, value]() {
@@ -453,9 +484,10 @@ void showMainMenu() {
     addItem(menu, QStringLiteral("Cabecera ›"), []() { scheduleMenu([]() { showZonesMenu(true); }); });
     addItem(menu, QStringLiteral("Pie ›"), []() { scheduleMenu([]() { showZonesMenu(false); }); });
 
-    const bool clock24 = readBool(QStringLiteral("Reading.Widget.Clock/24hFormat"), true);
-    addItem(menu, QStringLiteral("Reloj: %1 h").arg(clock24 ? 24 : 12), [clock24]() {
-        writeBool(QStringLiteral("Reading.Widget.Clock/24hFormat"), !clock24);
+    const QString clockKey = QString::fromLatin1(SettingsKeys::ReadingWidgetClock24hFormat);
+    const bool clock24 = readBool(clockKey, true);
+    addItem(menu, QStringLiteral("Reloj: %1 h").arg(clock24 ? 24 : 12), [clock24, clockKey]() {
+        writeBool(clockKey, !clock24);
         scheduleMenu(showMainMenu);
     });
 
@@ -474,7 +506,7 @@ void consumeTrigger() {
     // composed entirely of NickelTouchMenu + MenuTextItem, the same touch-aware
     // widgets NickelMenu uses for its own menus. No browser, network or Wi-Fi is
     // involved.
-    QTimer::singleShot(300, []() { showMainMenu(); });
+    QTimer::singleShot(kNickelMenuCloseDelayMs, []() { showMainMenu(); });
 }
 
 void installWatcher() {
