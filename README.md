@@ -9,15 +9,19 @@ A beginner-friendly addon for customizing Kobo eReaders.
   - Battery and Clock widgets (similar to [NickelClock](https://github.com/shermp/NickelClock))
   - Book widgets: title, progress, pages, remaining time
   - Chapter widgets: title, progress, pages, remaining time
+- Native on-device settings menu when [NickelMenu](https://github.com/pgaskin/NickelMenu) is installed
+  - Works completely offline; Wi-Fi is not required
+  - Changes to reading layout/widgets are applied live without closing the current book
 - Customize bookmark image
 - More to come...
 
 #### Difference from KoboPatch:
-  - Beginner-friendly, "patches" can be customized without reinstalling firmware (just edit and reboot)
+  - Beginner-friendly, "patches" can be customized without reinstalling firmware
+  - Reading layout/widget settings can be changed directly from the Kobo when NickelMenu is installed
   - No need to wait for patch updates when a new firmware is released (most of the time)
   - Downside: not all patches can be implemented, and it requires more work to add a new tweak
 
-#### Difference from NickekClock:  
+#### Difference from NickelClock:  
   - Uses its own widgets for clock & battery instead of Kobo's built-in ones (reduce the likelihood of encountering unwanted bugs)
   - Clock & battery only update after a page turn
   - Supports Dark mode
@@ -91,11 +95,16 @@ Follow these steps to install **Kobo Tweaks**:
 
 After it installs and reboots, open a book and you'll see new Clock and Battery widgets on the header. To customize **Kobo Tweaks**, check the **Customization** section below.
 
+> [!NOTE]
+> The native **Ajustes Kobo Tweaks** menu requires [NickelMenu](https://github.com/pgaskin/NickelMenu). Kobo Tweaks itself still works without NickelMenu and can always be configured by editing `settings.ini` manually. The native menu does not use a browser or network connection, so Wi-Fi can stay disabled.
+
 > [!IMPORTANT]
 > <table align="center"><tr><td align="center"><img height="200" alt="image" src="./resources/screenshots/dialog-nickelclock.png" /></td></tr><tr><td>Since <b>Kobo Tweaks</b> cannot be used with <b>NickelClock</b>, it automatically detects and uninstalls <b>NickelClock</b> for you.<br><br>If this dialog appears when opening a book and the layout is broken, restart the device once again before continuing. If it doesn't work, try to <a href="https://github.com/shermp/NickelClock#uninstall-nickelclock">uninstall NickelClock</a> manually.</td></tr></table>
 
 There are a few new files and folders in your Kobo eRreader:
 <pre>.adds/
+├─ nm/
+│  ├─ kobo-tweaks
 ├─ tweaks/
 │  ├─ images/
 │  ├─ DELETE_TO_UNINSTALL.txt
@@ -112,10 +121,25 @@ To uninstall **Kobo Tweaks**, delete the `DELETE_TO_UNINSTALL.txt` file and rest
 > [!WARNING]
 > After installation, the `Reading settings > Reading progress > Header/Footer` values will always be `Off`. You can only use widgets provided by Kobo Tweaks.
 
-Settings can be customized by editing the `.adds/tweaks/settings.ini` file on your Kobo eReader.
+### Native settings menu
+
+When NickelMenu is installed, open a book and choose **Ajustes Kobo Tweaks** from the reader menu. The native menu lets you change:
+
+- Header/footer height, margins and spacer sizes
+- Widget spacing and separator
+- Battery threshold and display styles
+- Clock 12/24-hour format
+- Left, center and right widget zones for both header and footer
+
+Reading layout and widget changes made from this menu are saved to `.adds/tweaks/settings.ini` and applied live to the current book. The reader view is not closed or recreated.
+
+The menu is implemented using Nickel's native touch menu controls. It works locally on the device and does **not** require Wi-Fi or an Internet connection.
+
+### Manual configuration
+
+Settings can also be customized by editing the `.adds/tweaks/settings.ini` file on your Kobo eReader. Manual file edits are not watched continuously; reopen the book (or restart the reader view) after editing the file outside the native menu.
 
 ### [Reading]
-> Applies after reopening the book
 
 | Setting and description | Values |
 |-|-|
@@ -125,7 +149,6 @@ Settings can be customized by editing the `.adds/tweaks/settings.ini` file on yo
 | `HeaderSpacerHeight`, `FooterSpacerHeight`<br>---<br><i>Sets the amount of space between header/footer and the text</i> | <b>Range:</b> 0-100<br><b>Default:</b> 0 |
 
 ### [Reading.Widget]
-> Applies after reopening the book
 
 | Setting and description | Values (case-insensitive) |
 |-|-|
