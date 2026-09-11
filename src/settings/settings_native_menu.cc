@@ -1,4 +1,5 @@
 #include "../common.h"
+#include "../hooks/reading_view.h"
 
 #include <QAction>
 #include <QApplication>
@@ -164,11 +165,21 @@ QStringList readStringList(const QString& key) {
     return list;
 }
 
+void scheduleRuntimeReload() {
+    // Run after the current Nickel menu action returns. This keeps menu gesture
+    // handling isolated from the reader widget rebuild while still making the
+    // change visible before the submenu is reopened.
+    QTimer::singleShot(0, []() {
+        ReadingViewHook::reloadWidgets();
+    });
+}
+
 void writeValue(const QString& key, const QVariant& value) {
     QSettings s(QString::fromLatin1(kSettingsPath), QSettings::IniFormat);
     s.setIniCodec("UTF-8");
     s.setValue(key, value);
     s.sync();
+    scheduleRuntimeReload();
 }
 
 void writeInt(const QString& key, int value) {
@@ -260,6 +271,7 @@ void toggleWidgetInZone(const QString& targetKey, const QString& widget) {
     }
 
     s.sync();
+    scheduleRuntimeReload();
 }
 
 QString nextBatteryStyle(const QString& current) {
