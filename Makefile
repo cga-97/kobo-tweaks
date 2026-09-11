@@ -13,6 +13,7 @@ override SOURCES += \
 	src/patches.cc \
 	src/utils.cc \
 	src/settings/settings.cc \
+	src/settings/settings_ui.cc \
 	src/debug_utils.cc \
 	src/adapters/reading_view.cc \
 	src/hooks/reading_view.cc \
