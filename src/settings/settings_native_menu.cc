@@ -82,10 +82,28 @@ void addItem(NickelTouchMenu* menu, const QString& label, const std::function<vo
     }
 }
 
-int readInt(const char* key, int fallback) {
+QVariant readValue(const char* key, const QVariant& fallback) {
     QSettings s(QString::fromLatin1(kSettingsPath), QSettings::IniFormat);
     s.setIniCodec("UTF-8");
-    return s.value(QString::fromLatin1(key), fallback).toInt();
+    s.sync();
+    return s.value(QString::fromLatin1(key), fallback);
+}
+
+int readInt(const char* key, int fallback) {
+    bool ok = false;
+    const int value = readValue(key, fallback).toInt(&ok);
+    return ok ? value : fallback;
+}
+
+bool readBool(const char* key, bool fallback) {
+    const QVariant value = readValue(key, fallback);
+
+    // Kobo Tweaks stores this setting as a QVariant bool, which QSettings may
+    // serialize as "true"/"false". Using toInt() on "true" returns 0, so the
+    // settings menu would incorrectly display 12 h while the clock was really
+    // configured for 24 h. QVariant::toBool() handles bools, 0/1 and the
+    // textual forms correctly.
+    return value.toBool();
 }
 
 void writeInt(const char* key, int value) {
@@ -95,10 +113,15 @@ void writeInt(const char* key, int value) {
     s.sync();
 }
 
-QString readString(const char* key, const QString& fallback) {
+void writeBool(const char* key, bool value) {
     QSettings s(QString::fromLatin1(kSettingsPath), QSettings::IniFormat);
     s.setIniCodec("UTF-8");
-    return s.value(QString::fromLatin1(key), fallback).toString();
+    s.setValue(QString::fromLatin1(key), value);
+    s.sync();
+}
+
+QString readString(const char* key, const QString& fallback) {
+    return readValue(key, fallback).toString();
 }
 
 void writeString(const char* key, const QString& value) {
@@ -163,9 +186,9 @@ void showMainMenu() {
         reopenMainMenu();
     });
 
-    const bool clock24 = readInt("Reading.Widget.Clock/24hFormat", 1) != 0;
+    const bool clock24 = readBool("Reading.Widget.Clock/24hFormat", true);
     addItem(menu, QStringLiteral("Reloj: %1 h").arg(clock24 ? 24 : 12), [clock24]() {
-        writeInt("Reading.Widget.Clock/24hFormat", clock24 ? 0 : 1);
+        writeBool("Reading.Widget.Clock/24hFormat", !clock24);
         reopenMainMenu();
     });
 
