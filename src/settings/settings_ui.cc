@@ -1,6 +1,5 @@
 #include "../common.h"
 
-#include <QAbstractButton>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
@@ -57,7 +56,6 @@ QString zoneSummary(const QStringList& values) {
     if (values.isEmpty()) {
         return QStringLiteral("Ninguno");
     }
-
     QStringList labels;
     for (const auto& value : values) {
         labels << widgetLabel(value);
@@ -70,7 +68,6 @@ QStringList readStringList(QSettings& settings, const QString& key) {
     if (!value.isValid()) {
         return {};
     }
-
     QStringList list = value.toStringList();
     if (list.isEmpty()) {
         const QString single = value.toString().trimmed();
@@ -96,26 +93,22 @@ public:
             "QListWidget::item { min-height: 58px; }"
             "QTabBar::tab { min-height: 62px; min-width: 190px; padding: 8px; }"
         ));
-
         loadValues();
         buildUi();
     }
 
 private:
     QSettings settings;
-
     QSpinBox* heightScale = nullptr;
     QSpinBox* margins = nullptr;
     QSpinBox* headerSpacer = nullptr;
     QSpinBox* footerSpacer = nullptr;
     QSpinBox* widgetSpacing = nullptr;
     QSpinBox* batteryThreshold = nullptr;
-
     QComboBox* separator = nullptr;
     QComboBox* batteryStyle = nullptr;
     QComboBox* batteryChargingStyle = nullptr;
     QCheckBox* clock24h = nullptr;
-
     QStringList headerLeft;
     QStringList headerCenter;
     QStringList headerRight;
@@ -148,7 +141,6 @@ private:
         for (const auto& entry : entries) {
             combo->addItem(entry.second, entry.first);
         }
-
         const int index = combo->findData(current, Qt::UserRole, Qt::MatchFixedString);
         combo->setCurrentIndex(index >= 0 ? index : 0);
         return combo;
@@ -192,7 +184,6 @@ private:
             {QStringLiteral("IconLevel"), QStringLiteral("Icono + porcentaje")},
             {QStringLiteral("LevelIcon"), QStringLiteral("Porcentaje + icono")},
         }, settings.value(QStringLiteral("Reading.Widget.Battery/Style"), QStringLiteral("IconLevel")).toString());
-
         batteryChargingStyle = makeEnumCombo({
             {QStringLiteral("Icon"), QStringLiteral("Solo icono")},
             {QStringLiteral("Level"), QStringLiteral("Solo porcentaje")},
@@ -220,7 +211,7 @@ private:
         dialog.setStyleSheet(styleSheet());
 
         auto* root = new QVBoxLayout(&dialog);
-        auto* info = new QLabel(QStringLiteral("Selecciona los elementos y su posición. Un widget solo puede estar en una zona."), &dialog);
+        auto* info = new QLabel(QStringLiteral("Selecciona los elementos. Un widget solo puede estar en una zona."), &dialog);
         info->setWordWrap(true);
         root->addWidget(info);
 
@@ -258,7 +249,6 @@ private:
     QWidget* buildZonesTab(const QString& title, QStringList* left, QStringList* center, QStringList* right) {
         auto* tab = new QWidget(this);
         auto* root = new QVBoxLayout(tab);
-
         auto* intro = new QLabel(QStringLiteral("Toca una zona para elegir qué información aparece en ella."), tab);
         intro->setWordWrap(true);
         root->addWidget(intro);
@@ -268,7 +258,6 @@ private:
             auto* groupLayout = new QVBoxLayout(group);
             auto* button = new QPushButton(zoneSummary(*zone), group);
             button->setMinimumHeight(84);
-            button->setWordWrap(false);
             QObject::connect(button, &QPushButton::clicked, this, [this, title, label, zone, button]() {
                 editZone(title + QStringLiteral(" · ") + label, zone, button);
             });
@@ -289,7 +278,6 @@ private:
             &headerLeft, &headerCenter, &headerRight,
             &footerLeft, &footerCenter, &footerRight,
         };
-
         for (const auto* zone : zones) {
             for (const auto& widget : *zone) {
                 const QString key = widget.toLower();
@@ -309,14 +297,12 @@ private:
         settings.setValue(QStringLiteral("Reading/HeaderFooterMargins"), margins->value());
         settings.setValue(QStringLiteral("Reading/HeaderSpacerHeight"), headerSpacer->value());
         settings.setValue(QStringLiteral("Reading/FooterSpacerHeight"), footerSpacer->value());
-
         settings.setValue(QStringLiteral("Reading.Widget/HeaderLeft"), headerLeft);
         settings.setValue(QStringLiteral("Reading.Widget/HeaderCenter"), headerCenter);
         settings.setValue(QStringLiteral("Reading.Widget/HeaderRight"), headerRight);
         settings.setValue(QStringLiteral("Reading.Widget/FooterLeft"), footerLeft);
         settings.setValue(QStringLiteral("Reading.Widget/FooterCenter"), footerCenter);
         settings.setValue(QStringLiteral("Reading.Widget/FooterRight"), footerRight);
-
         settings.setValue(QStringLiteral("Reading.Widget/Spacing"), widgetSpacing->value());
         settings.setValue(QStringLiteral("Reading.Widget/Separator"), separator->currentData().toString());
         settings.setValue(QStringLiteral("Reading.Widget.Battery/Style"), batteryStyle->currentData().toString());
@@ -328,7 +314,6 @@ private:
 
     void buildUi() {
         auto* root = new QVBoxLayout(this);
-
         auto* tabs = new QTabWidget(this);
         tabs->addTab(buildLayoutTab(), QStringLiteral("Diseño"));
         tabs->addTab(buildZonesTab(QStringLiteral("Cabecera"), &headerLeft, &headerCenter, &headerRight), QStringLiteral("Cabecera"));
@@ -388,8 +373,6 @@ void installWatcherNow() {
     QObject::connect(gWatcher, &QFileSystemWatcher::directoryChanged, QCoreApplication::instance(), [](const QString&) {
         QTimer::singleShot(0, QCoreApplication::instance(), []() { openSettingsDialog(); });
     });
-
-    // Handle a trigger that already existed before the watcher was installed.
     QTimer::singleShot(0, QCoreApplication::instance(), []() { openSettingsDialog(); });
     nh_log("Kobo Tweaks settings UI watcher installed");
 }
@@ -399,7 +382,6 @@ void scheduleInstall() {
         return;
     }
     gInstallScheduled = true;
-
     if (QCoreApplication::instance()) {
         QTimer::singleShot(1000, QCoreApplication::instance(), []() { installWatcherNow(); });
     }
@@ -408,10 +390,7 @@ void scheduleInstall() {
 Q_COREAPP_STARTUP_FUNCTION(scheduleInstall)
 
 struct LateBootstrap {
-    LateBootstrap() {
-        // Covers the case where the plugin is loaded after QCoreApplication startup.
-        scheduleInstall();
-    }
+    LateBootstrap() { scheduleInstall(); }
 };
 
 LateBootstrap gLateBootstrap;
