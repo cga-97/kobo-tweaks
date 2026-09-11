@@ -15,6 +15,7 @@ override SOURCES += \
 	src/utils.cc \
 	src/settings/settings.cc \
 	src/settings/settings_server.cc \
+	src/settings/settings_server_bootstrap.cc \
 	src/debug_utils.cc \
 	src/adapters/reading_view.cc \
 	src/hooks/reading_view.cc \
