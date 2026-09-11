@@ -378,13 +378,11 @@ void installWatcherNow() {
 }
 
 void scheduleInstall() {
-    if (gInstallScheduled) {
+    if (gInstallScheduled || !QCoreApplication::instance()) {
         return;
     }
     gInstallScheduled = true;
-    if (QCoreApplication::instance()) {
-        QTimer::singleShot(1000, QCoreApplication::instance(), []() { installWatcherNow(); });
-    }
+    QTimer::singleShot(1000, QCoreApplication::instance(), []() { installWatcherNow(); });
 }
 
 Q_COREAPP_STARTUP_FUNCTION(scheduleInstall)
