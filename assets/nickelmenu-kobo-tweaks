@@ -1,0 +1,3 @@
+# Kobo Tweaks native settings UI
+# NickelMenu only drops a local trigger file; Kobo Tweaks opens a native NickelTouchMenu.
+menu_item :reader :Ajustes Kobo Tweaks :cmd_spawn :quiet:/bin/touch /mnt/onboard/.adds/tweaks/open-settings

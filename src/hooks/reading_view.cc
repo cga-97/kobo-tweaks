@@ -3,7 +3,10 @@
 #include "colour_attr_cleaner.h"
 
 #include <QHBoxLayout>
+#include <QLayout>
 #include <QMetaEnum>
+#include <QMetaObject>
+#include <QPointer>
 #include <vector>
 
 // On colour Kobos, SelectionController::onInlineDefinitionResults adds two
@@ -69,6 +72,186 @@ namespace ReadingViewHook {
 
     QString contentTitle;
 
+    namespace {
+        bool zonesEmpty(const QVector<WidgetTypeEnum>& left, const QVector<WidgetTypeEnum>& center, const QVector<WidgetTypeEnum>& right) {
+            return left.isEmpty() && center.isEmpty() && right.isEmpty();
+        }
+
+        QString makeWidgetQss(const TweaksReadingSettings& readingSettings) {
+            QString readingFooterQss = Qss::getContent(QStringLiteral(":/qss/ReadingFooter.qss"));
+            QString patchedQss = Qss::copySelectors(
+                readingFooterQss,
+                QStringLiteral("#caption"),
+                QStringList() << QStringLiteral("#twksLabel") << QStringLiteral("#twksSeparator")
+            );
+            if (readingSettings.headerFooterHeightScale < 100) {
+                patchedQss = Patch::ReadingView::scaleHeaderFooterHeight(patchedQss, readingSettings.headerFooterHeightScale);
+            }
+            patchedQss.replace(QStringLiteral("ReadingFooter"), QStringLiteral("TwWidgetZonesContainer"));
+            return patchedQss;
+        }
+
+        void applySpacerHeightQss(ReadingView* view, const TweaksReadingSettings& readingSettings, bool emptyHeader, bool emptyFooter, bool includeBrightnessQss) {
+            QString rootQss = view->styleSheet();
+
+            if (emptyHeader) {
+                rootQss = Patch::ReadingView::setFixedHeight(rootQss, QStringLiteral("#topSpacer"), readingSettings.headerSpacerHeight);
+            } else {
+                rootQss = Patch::ReadingView::resetHeight(rootQss, QStringLiteral("#topSpacer"));
+            }
+
+            if (emptyFooter) {
+                rootQss = Patch::ReadingView::setFixedHeight(rootQss, QStringLiteral("#bottomSpacer"), readingSettings.footerSpacerHeight);
+            } else {
+                rootQss = Patch::ReadingView::resetHeight(rootQss, QStringLiteral("#bottomSpacer"));
+            }
+
+            if (includeBrightnessQss) {
+                rootQss = Patch::ReadingView::addBrightnessLabelQss(rootQss);
+            }
+            view->setStyleSheet(rootQss);
+        }
+
+        void clearTweaksSpacer(QWidget* spacer) {
+            if (!spacer) {
+                return;
+            }
+
+            const auto containers = spacer->findChildren<TwWidgetZonesContainer*>(QString(), Qt::FindDirectChildrenOnly);
+            for (auto* container : containers) {
+                delete container;
+            }
+
+            // Kobo Tweaks owns the layout it installs on topSpacer/bottomSpacer.
+            // Once the custom container is gone, remove that layout too so a new
+            // one can be installed with the updated spacer/margin settings.
+            if (QLayout* layout = spacer->layout()) {
+                delete layout;
+            }
+        }
+
+        TwWidgetZonesContainer* installContainer(
+            QWidget* spacer,
+            const TweaksReadingSettings& readingSettings,
+            const QString& patchedQss,
+            bool header
+        ) {
+            auto* container = new TwWidgetZonesContainer(readingSettings, patchedQss);
+            container->setObjectName(header ? QStringLiteral("twksHeaderContainer") : QStringLiteral("twksFooterContainer"));
+
+            auto* layout = new QHBoxLayout(spacer);
+            if (header) {
+                layout->setContentsMargins(0, readingSettings.headerSpacerHeight, 0, 0);
+            } else {
+                layout->setContentsMargins(0, 0, 0, readingSettings.footerSpacerHeight);
+            }
+            layout->addWidget(container, 1);
+            return container;
+        }
+    }
+
+    bool reloadWidgets() {
+        if (!MainWindowController_sharedInstance || !MainWindowController_currentView) {
+            nh_log("Kobo Tweaks runtime reload: MainWindowController symbols unavailable");
+            return false;
+        }
+
+        void* mwc = MainWindowController_sharedInstance();
+        ReadingView* view = MainWindowController_currentView(mwc);
+        if (!view) {
+            nh_log("Kobo Tweaks runtime reload: no current view");
+            return false;
+        }
+
+        auto* gestureContainer = view->findChild<GestureReceivingContainer*>(QStringLiteral("gestureContainer"), Qt::FindDirectChildrenOnly);
+        if (!gestureContainer) {
+            nh_log("Kobo Tweaks runtime reload: current view is not a ReadingView");
+            return false;
+        }
+
+        auto* topSpacer = gestureContainer->findChild<ReadingFooter*>(QStringLiteral("topSpacer"), Qt::FindDirectChildrenOnly);
+        auto* bottomSpacer = gestureContainer->findChild<ReadingFooter*>(QStringLiteral("bottomSpacer"), Qt::FindDirectChildrenOnly);
+        if (!topSpacer || !bottomSpacer) {
+            nh_log("Kobo Tweaks runtime reload: topSpacer/bottomSpacer unavailable");
+            return false;
+        }
+
+        ReadingViewAdapters adapters {};
+        adapters.pageChanged = view->findChild<ReadingViewAdapter::PageChanged*>(QString(), Qt::FindDirectChildrenOnly);
+        adapters.renderVolume = view->findChild<ReadingViewAdapter::RenderVolume*>(QString(), Qt::FindDirectChildrenOnly);
+        adapters.readerDoneLoading = view->findChild<ReadingViewAdapter::ReaderDoneLoading*>(QString(), Qt::FindDirectChildrenOnly);
+        adapters.darkMode = gestureContainer->findChild<ReadingViewAdapter::DarkMode*>(QString(), Qt::FindDirectChildrenOnly);
+
+        if (!adapters.pageChanged || !adapters.renderVolume || !adapters.readerDoneLoading || !adapters.darkMode) {
+            nh_log("Kobo Tweaks runtime reload: reader adapters unavailable");
+            return false;
+        }
+
+        // Re-read the INI but do not recreate ReadingView. Existing widget
+        // signal connections disappear automatically when their receivers are
+        // deleted below; the long-lived adapters remain attached to Nickel.
+        settings.load();
+        const TweaksReadingSettings readingSettings = settings.getReadingSettings();
+
+        const bool emptyHeader = zonesEmpty(
+            readingSettings.widgetHeaderLeft,
+            readingSettings.widgetHeaderCenter,
+            readingSettings.widgetHeaderRight
+        );
+        const bool emptyFooter = zonesEmpty(
+            readingSettings.widgetFooterLeft,
+            readingSettings.widgetFooterCenter,
+            readingSettings.widgetFooterRight
+        );
+
+        clearTweaksSpacer(topSpacer);
+        clearTweaksSpacer(bottomSpacer);
+        applySpacerHeightQss(view, readingSettings, emptyHeader, emptyFooter, false);
+
+        const QString patchedQss = makeWidgetQss(readingSettings);
+        TwWidgetZonesContainer* headerContainer = emptyHeader ? nullptr : installContainer(topSpacer, readingSettings, patchedQss, true);
+        TwWidgetZonesContainer* footerContainer = emptyFooter ? nullptr : installContainer(bottomSpacer, readingSettings, patchedQss, false);
+
+        const int minimumSideWidth = qMax(10, originalContentsMargins - readingSettings.headerFooterMargins);
+        if (headerContainer) {
+            headerContainer->setupZones(
+                view,
+                adapters,
+                contentTitle,
+                minimumSideWidth,
+                readingSettings.widgetHeaderLeft,
+                readingSettings.widgetHeaderCenter,
+                readingSettings.widgetHeaderRight
+            );
+        }
+        if (footerContainer) {
+            footerContainer->setupZones(
+                view,
+                adapters,
+                contentTitle,
+                minimumSideWidth,
+                readingSettings.widgetFooterLeft,
+                readingSettings.widgetFooterCenter,
+                readingSettings.widgetFooterRight
+            );
+        }
+
+        // Newly-created page/progress/time widgets normally get their first
+        // content on the next pageChanged signal. Invoke the existing adapter's
+        // private Qt slot through the meta-object system so the current page is
+        // populated immediately without turning a page or touching ReadingView.
+        QMetaObject::invokeMethod(adapters.pageChanged, "notifyPageChanged", Qt::QueuedConnection);
+
+        topSpacer->updateGeometry();
+        bottomSpacer->updateGeometry();
+        gestureContainer->updateGeometry();
+        view->updateGeometry();
+        view->update();
+
+        nh_log("Kobo Tweaks runtime reload: reading widgets rebuilt");
+        return true;
+    }
+
     void constructor(ReadingView* view) {
         // Must parse settings before constructor since other widgets use them
         settings.load();
@@ -110,29 +293,10 @@ namespace ReadingViewHook {
             return;
         }
 
-        // Update QSS
         auto readingSettings = settings.getReadingSettings();
-        QString rootQss = view->styleSheet();
-
-        // Adjust topSpacer & bottomSpacer's heights
-        bool emptyHeader = readingSettings.widgetHeaderLeft.isEmpty() && readingSettings.widgetHeaderCenter.isEmpty() && readingSettings.widgetHeaderRight.isEmpty();
-        bool emptyFooter = readingSettings.widgetFooterLeft.isEmpty() && readingSettings.widgetFooterCenter.isEmpty() && readingSettings.widgetFooterRight.isEmpty();
-
-        // Set heights of topSpacer and bottomSpacer
-        if (emptyHeader) {
-            rootQss = Patch::ReadingView::setFixedHeight(rootQss, QStringLiteral("#topSpacer"), readingSettings.headerSpacerHeight);
-        } else {
-            rootQss = Patch::ReadingView::resetHeight(rootQss, QStringLiteral("#topSpacer"));
-        }
-
-        if (emptyFooter) {
-            rootQss = Patch::ReadingView::setFixedHeight(rootQss, QStringLiteral("#bottomSpacer"), readingSettings.footerSpacerHeight);
-        } else {
-            rootQss = Patch::ReadingView::resetHeight(rootQss, QStringLiteral("#bottomSpacer"));
-        }
-
-        rootQss = Patch::ReadingView::addBrightnessLabelQss(rootQss);
-        view->setStyleSheet(rootQss);
+        const bool emptyHeader = zonesEmpty(readingSettings.widgetHeaderLeft, readingSettings.widgetHeaderCenter, readingSettings.widgetHeaderRight);
+        const bool emptyFooter = zonesEmpty(readingSettings.widgetFooterLeft, readingSettings.widgetFooterCenter, readingSettings.widgetFooterRight);
+        applySpacerHeightQss(view, readingSettings, emptyHeader, emptyFooter, true);
 
         // These adapters abstract the logic and ensure that the update methods on the widgets aren't called after either the widget or the ReadingView has been destroyed
         auto renderVolumeAdapter = new ReadingViewAdapter::RenderVolume(view);
@@ -154,39 +318,23 @@ namespace ReadingViewHook {
         adapters.renderVolume = renderVolumeAdapter;
         adapters.readerDoneLoading = readerDoneLoadingAdapter;
 
-        // Patch QSS
-        QString readingFooterQss = Qss::getContent(QStringLiteral(":/qss/ReadingFooter.qss"));
-        QString patchedQss = Qss::copySelectors(readingFooterQss, QStringLiteral("#caption"), QStringList() << QStringLiteral("#twksLabel") << QStringLiteral("#twksSeparator"));
-        if (readingSettings.headerFooterHeightScale < 100) {
-            patchedQss = Patch::ReadingView::scaleHeaderFooterHeight(patchedQss, readingSettings.headerFooterHeightScale);
-        }
-        patchedQss.replace(QStringLiteral("ReadingFooter"), QStringLiteral("TwWidgetZonesContainer"));
+        const QString patchedQss = makeWidgetQss(readingSettings);
+        TwWidgetZonesContainer* headerContainer = emptyHeader ? nullptr : installContainer(topSpacer, readingSettings, patchedQss, true);
+        TwWidgetZonesContainer* footerContainer = emptyFooter ? nullptr : installContainer(bottomSpacer, readingSettings, patchedQss, false);
 
-        TwWidgetZonesContainer* headerContainer = emptyHeader ? nullptr : new TwWidgetZonesContainer(readingSettings, patchedQss);
-        TwWidgetZonesContainer* footerContainer = emptyFooter ? nullptr : new TwWidgetZonesContainer(readingSettings, patchedQss);
-
-        if (headerContainer) {
-            // add to topSpacer
-            QHBoxLayout* layout = new QHBoxLayout(topSpacer);
-            layout->setContentsMargins(0, readingSettings.headerSpacerHeight, 0, 0);
-            layout->addWidget(headerContainer, 1);
-        }
-
-        if (footerContainer) {
-            // add to bottomSpacer
-            QHBoxLayout* layout = new QHBoxLayout(bottomSpacer);
-            layout->setContentsMargins(0, 0, 0, readingSettings.footerSpacerHeight);
-            layout->addWidget(footerContainer, 1);
-        }
-
-        QObject::connect(readerDoneLoadingAdapter, &ReadingViewAdapter::ReaderDoneLoading::readerDoneLoading, view, [view, gestureContainer, adapters, readingSettings, headerContainer, footerContainer] {
+        // The containers may later be destroyed by runtime reload. QPointer
+        // keeps this readerDoneLoading handler safe if Nickel emits the signal
+        // again after a reflow or other reader lifecycle event.
+        QPointer<TwWidgetZonesContainer> headerGuard(headerContainer);
+        QPointer<TwWidgetZonesContainer> footerGuard(footerContainer);
+        QObject::connect(readerDoneLoadingAdapter, &ReadingViewAdapter::ReaderDoneLoading::readerDoneLoading, view, [view, adapters, readingSettings, headerGuard, footerGuard] {
             int minimumSideWidth = qMax(10, originalContentsMargins - readingSettings.headerFooterMargins);
-            if (headerContainer) {
-                headerContainer->setupZones(view, adapters, contentTitle, minimumSideWidth, readingSettings.widgetHeaderLeft, readingSettings.widgetHeaderCenter, readingSettings.widgetHeaderRight);
+            if (headerGuard) {
+                headerGuard->setupZones(view, adapters, contentTitle, minimumSideWidth, readingSettings.widgetHeaderLeft, readingSettings.widgetHeaderCenter, readingSettings.widgetHeaderRight);
             }
 
-            if (footerContainer) {
-                footerContainer->setupZones(view, adapters, contentTitle, minimumSideWidth, readingSettings.widgetFooterLeft, readingSettings.widgetFooterCenter, readingSettings.widgetFooterRight);
+            if (footerGuard) {
+                footerGuard->setupZones(view, adapters, contentTitle, minimumSideWidth, readingSettings.widgetFooterLeft, readingSettings.widgetFooterCenter, readingSettings.widgetFooterRight);
             }
         });
 
@@ -237,7 +385,7 @@ namespace ReadingViewHook {
                 return static_cast<QLabel*>(cachedObj);
             }
 
-            // Fint QLabel
+            // Find QLabel
             void* mwc = MainWindowController_sharedInstance();
             QWidget* view = MainWindowController_currentView(mwc);
             QWidget* gestureContainer = view->findChild<GestureReceivingContainer*>(QStringLiteral("gestureContainer"), Qt::FindDirectChildrenOnly);

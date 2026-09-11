@@ -6,6 +6,7 @@ override QRCS     += src/resources.qrc
 override CFLAGS   += -Wall -Wextra -Werror
 override CXXFLAGS += -Wall -Wextra -Werror -Wno-missing-field-initializers
 override KOBOROOT += assets/DELETE_TO_UNINSTALL.txt:/mnt/onboard/.adds/tweaks/DELETE_TO_UNINSTALL.txt
+override KOBOROOT += assets/nickelmenu-kobo-tweaks:/mnt/onboard/.adds/nm/kobo-tweaks
 
 override SOURCES += \
 	src/tweaks.cc \
@@ -13,6 +14,7 @@ override SOURCES += \
 	src/patches.cc \
 	src/utils.cc \
 	src/settings/settings.cc \
+	src/settings/settings_native_menu.cc \
 	src/debug_utils.cc \
 	src/adapters/reading_view.cc \
 	src/hooks/reading_view.cc \
