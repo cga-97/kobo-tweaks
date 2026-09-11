@@ -12,6 +12,11 @@ namespace ReadingViewHook {
     void constructor(ReadingView* self);
     void setFooterMargin(QWidget* self, int margin);
 
+    // Reload Kobo Tweaks' header/footer widgets from settings.ini without
+    // recreating Nickel's ReadingView. Returns false when the current view is
+    // not an active reader or its adapters are not available yet.
+    bool reloadWidgets();
+
     namespace DogEarDelegate {
         void constructor(QWidget* self, QWidget* parent, const QString& image);
     }
