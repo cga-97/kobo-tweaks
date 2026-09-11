@@ -28,6 +28,11 @@ void (*BrightnessEventFilter_updateBrightnessHeader)(BrightnessEventFilter* self
 void* (*MainWindowController_sharedInstance)() = nullptr;
 QWidget* (*MainWindowController_currentView)(void*) = nullptr;
 
+void (*NickelTouchMenu_constructor)(QMenu* self, QWidget* parent, int position) = nullptr;
+void (*MenuTextItem_constructor)(QWidget* self, QWidget* parent, bool checkable, bool italic) = nullptr;
+void (*MenuTextItem_setText)(QWidget* self, const QString& text) = nullptr;
+void (*MenuTextItem_registerForTapGestures)(QWidget* self) = nullptr;
+
 HardwareInterface* (*HardwareFactory_sharedInstance)() = nullptr;
 Device* (*Device_getCurrentDevice)() = nullptr;
 bool (*Device_hasColorDisplay)(Device* self) = nullptr;

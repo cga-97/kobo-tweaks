@@ -16,18 +16,17 @@
 // flash with the expensive waveform every time they update.
 //
 // We fix this by connecting to SelectionController::closeFooterMenu (the
-// canonical selection teardown signal) and clearing those attrs from the
-// ReadingView. The attrs are looked up by name via QMetaEnum so we don't
-// hardcode magic numbers that may shift between firmware versions, and the
-// whole path is gated behind Device::hasColorDisplay() so it is a no-op on
-// B&W devices.
+// canonical selection teardown signal) and clearing those attrs. The attrs
+// are looked up by name via QMetaEnum so we don't hardcode magic numbers that
+// may shift between firmware versions, and the whole path is gated behind
+// Device::hasColorDisplay() so it is a no-op on B&W devices.
 static const char* const kExtraColourAttrs[] = {
     "WA_KoboEpdUpdateModeFull",
     "WA_KoboEpdWfModeGCC16",
 };
 
-// QObject::staticQtMetaObject is protected; re-expose via a derived class
-// so we can look up Qt namespace enums by name on older Qt (pre-Q_NAMESPACE).
+// QObject::staticQtMetaObject is protected; re-expose via a derived class so
+// we can look up Qt namespace enums by name on older Qt (pre-Q_NAMESPACE).
 namespace {
 struct QtMetaAccess : QObject {
     using QObject::staticQtMetaObject;
@@ -70,9 +69,15 @@ namespace ReadingViewHook {
     static bool isDarkMode = false;
     static int originalContentsMargins = 0;
 
-    QString contentTitle;
-
     namespace {
+        const QString kHeaderLayoutName = QStringLiteral("twksHeaderLayout");
+        const QString kFooterLayoutName = QStringLiteral("twksFooterLayout");
+        constexpr const char* kContentTitleProperty = "twksContentTitle";
+
+        QString contentTitleFor(ReadingView* view) {
+            return view ? view->property(kContentTitleProperty).toString() : QString();
+        }
+
         bool zonesEmpty(const QVector<WidgetTypeEnum>& left, const QVector<WidgetTypeEnum>& center, const QVector<WidgetTypeEnum>& right) {
             return left.isEmpty() && center.isEmpty() && right.isEmpty();
         }
@@ -112,7 +117,7 @@ namespace ReadingViewHook {
             view->setStyleSheet(rootQss);
         }
 
-        void clearTweaksSpacer(QWidget* spacer) {
+        void clearTweaksSpacer(QWidget* spacer, const QString& expectedLayoutName) {
             if (!spacer) {
                 return;
             }
@@ -122,11 +127,16 @@ namespace ReadingViewHook {
                 delete container;
             }
 
-            // Kobo Tweaks owns the layout it installs on topSpacer/bottomSpacer.
-            // Once the custom container is gone, remove that layout too so a new
-            // one can be installed with the updated spacer/margin settings.
+            // Never delete a layout we cannot positively identify as ours.
+            // This makes runtime reload fail safe if a future Nickel firmware
+            // or another addon starts owning topSpacer/bottomSpacer layouts.
             if (QLayout* layout = spacer->layout()) {
-                delete layout;
+                if (layout->objectName() == expectedLayoutName) {
+                    delete layout;
+                } else {
+                    nh_log("Kobo Tweaks runtime reload: refusing to delete foreign spacer layout (%s)",
+                           layout->objectName().toUtf8().constData());
+                }
             }
         }
 
@@ -136,10 +146,23 @@ namespace ReadingViewHook {
             const QString& patchedQss,
             bool header
         ) {
+            const QString layoutName = header ? kHeaderLayoutName : kFooterLayoutName;
+
+            if (QLayout* existingLayout = spacer->layout()) {
+                if (existingLayout->objectName() == layoutName) {
+                    delete existingLayout;
+                } else {
+                    nh_log("Kobo Tweaks: refusing to replace foreign spacer layout (%s)",
+                           existingLayout->objectName().toUtf8().constData());
+                    return nullptr;
+                }
+            }
+
             auto* container = new TwWidgetZonesContainer(readingSettings, patchedQss);
             container->setObjectName(header ? QStringLiteral("twksHeaderContainer") : QStringLiteral("twksFooterContainer"));
 
             auto* layout = new QHBoxLayout(spacer);
+            layout->setObjectName(layoutName);
             if (header) {
                 layout->setContentsMargins(0, readingSettings.headerSpacerHeight, 0, 0);
             } else {
@@ -204,8 +227,8 @@ namespace ReadingViewHook {
             readingSettings.widgetFooterRight
         );
 
-        clearTweaksSpacer(topSpacer);
-        clearTweaksSpacer(bottomSpacer);
+        clearTweaksSpacer(topSpacer, kHeaderLayoutName);
+        clearTweaksSpacer(bottomSpacer, kFooterLayoutName);
         applySpacerHeightQss(view, readingSettings, emptyHeader, emptyFooter, false);
 
         const QString patchedQss = makeWidgetQss(readingSettings);
@@ -213,6 +236,7 @@ namespace ReadingViewHook {
         TwWidgetZonesContainer* footerContainer = emptyFooter ? nullptr : installContainer(bottomSpacer, readingSettings, patchedQss, false);
 
         const int minimumSideWidth = qMax(10, originalContentsMargins - readingSettings.headerFooterMargins);
+        const QString contentTitle = contentTitleFor(view);
         if (headerContainer) {
             headerContainer->setupZones(
                 view,
@@ -237,10 +261,13 @@ namespace ReadingViewHook {
         }
 
         // Newly-created page/progress/time widgets normally get their first
-        // content on the next pageChanged signal. Invoke the existing adapter's
-        // private Qt slot through the meta-object system so the current page is
-        // populated immediately without turning a page or touching ReadingView.
-        QMetaObject::invokeMethod(adapters.pageChanged, "notifyPageChanged", Qt::QueuedConnection);
+        // content on the next pageChanged signal. Queue a typed adapter refresh
+        // so the current page is populated immediately without touching
+        // ReadingView's private Qt slots by string name.
+        auto* pageChangedAdapter = adapters.pageChanged;
+        QTimer::singleShot(0, pageChangedAdapter, [pageChangedAdapter]() {
+            pageChangedAdapter->refresh();
+        });
 
         topSpacer->updateGeometry();
         bottomSpacer->updateGeometry();
@@ -300,8 +327,10 @@ namespace ReadingViewHook {
 
         // These adapters abstract the logic and ensure that the update methods on the widgets aren't called after either the widget or the ReadingView has been destroyed
         auto renderVolumeAdapter = new ReadingViewAdapter::RenderVolume(view);
-        QObject::connect(renderVolumeAdapter, &ReadingViewAdapter::RenderVolume::renderVolume, view, [](const Volume& volume) {
-            Content_getTitle(&contentTitle, &volume);
+        QObject::connect(renderVolumeAdapter, &ReadingViewAdapter::RenderVolume::renderVolume, view, [view](const Volume& volume) {
+            QString title;
+            Content_getTitle(&title, &volume);
+            view->setProperty(kContentTitleProperty, title);
         });
 
         auto darkModeAdapter = new ReadingViewAdapter::DarkMode(gestureContainer, view);
@@ -328,7 +357,8 @@ namespace ReadingViewHook {
         QPointer<TwWidgetZonesContainer> headerGuard(headerContainer);
         QPointer<TwWidgetZonesContainer> footerGuard(footerContainer);
         QObject::connect(readerDoneLoadingAdapter, &ReadingViewAdapter::ReaderDoneLoading::readerDoneLoading, view, [view, adapters, readingSettings, headerGuard, footerGuard] {
-            int minimumSideWidth = qMax(10, originalContentsMargins - readingSettings.headerFooterMargins);
+            const int minimumSideWidth = qMax(10, originalContentsMargins - readingSettings.headerFooterMargins);
+            const QString contentTitle = contentTitleFor(view);
             if (headerGuard) {
                 headerGuard->setupZones(view, adapters, contentTitle, minimumSideWidth, readingSettings.widgetHeaderLeft, readingSettings.widgetHeaderCenter, readingSettings.widgetHeaderRight);
             }
@@ -351,8 +381,9 @@ namespace ReadingViewHook {
         // Save the original margin
         originalContentsMargins = margin;
 
-        QLayout* layout = self->layout();
-        layout->setContentsMargins(margin, 0, margin, 0);
+        if (QLayout* layout = self->layout()) {
+            layout->setContentsMargins(margin, 0, margin, 0);
+        }
     }
 
     namespace DogEarDelegate {

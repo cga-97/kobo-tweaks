@@ -5,6 +5,31 @@
 #include <QPair>
 #include <QVector>
 
+namespace {
+    QString replaceGeneratedRule(QString qss, const QString& id, const QString& rule) {
+        const QString begin = QStringLiteral("/* KoboTweaks:%1:begin */").arg(id);
+        const QString end = QStringLiteral("/* KoboTweaks:%1:end */").arg(id);
+
+        int start = qss.indexOf(begin);
+        while (start >= 0) {
+            const int endPos = qss.indexOf(end, start);
+            if (endPos < 0) {
+                break;
+            }
+
+            int removeEnd = endPos + end.size();
+            if (removeEnd < qss.size() && qss.at(removeEnd) == QLatin1Char('\n')) {
+                ++removeEnd;
+            }
+            qss.remove(start, removeEnd - start);
+            start = qss.indexOf(begin);
+        }
+
+        qss.append(QStringLiteral("\n%1\n%2\n%3\n").arg(begin, rule, end));
+        return qss;
+    }
+}
+
 namespace Patch {
     namespace ReadingView {
         QString scaleHeaderFooterHeight(const QString& qss, int scale) {
@@ -35,48 +60,50 @@ namespace Patch {
         }
 
         QString setFixedHeight(QString qss, const QString& selector, int height) {
-            qss.append(
-                QStringLiteral("\n%1 { min-height: %2px; max-height: %2px; }\n")
+            return replaceGeneratedRule(
+                qss,
+                QStringLiteral("height:%1").arg(selector),
+                QStringLiteral("%1 { min-height: %2px; max-height: %2px; }")
                     .arg(selector)
                     .arg(height)
             );
-            return qss;
         }
 
         QString resetHeight(QString qss, const QString& selector) {
-            // 16777215 = QWIDGETSIZE_MAX
-            qss.append(
-                QStringLiteral("\n%1 { min-height: 0px; max-height: 16777215px; }\n")
-                    .arg(selector)
+            // 16777215 = QWIDGETSIZE_MAX. Use the same generated-rule id as
+            // setFixedHeight so repeated live reloads replace the previous
+            // rule instead of growing ReadingView's stylesheet indefinitely.
+            return replaceGeneratedRule(
+                qss,
+                QStringLiteral("height:%1").arg(selector),
+                QStringLiteral("%1 { min-height: 0px; max-height: 16777215px; }").arg(selector)
             );
-            return qss;
         }
 
         QString setPaddings(QString qss, const QString& selector, int top, int right, int bottom, int left) {
-            qss.append(
-                QStringLiteral("\n%1 { padding-top: %2px; padding-right: %3px; padding-bottom: %4px; padding-left: %5px; }\n")
+            return replaceGeneratedRule(
+                qss,
+                QStringLiteral("padding:%1").arg(selector),
+                QStringLiteral("%1 { padding-top: %2px; padding-right: %3px; padding-bottom: %4px; padding-left: %5px; }")
                     .arg(selector)
                     .arg(top)
                     .arg(right)
                     .arg(bottom)
                     .arg(left)
             );
-            return qss;
         }
 
         QString addBrightnessLabelQss(const QString& qss) {
-            QString result(qss);
-
-            result += QStringLiteral("\n")
-                + QStringLiteral("#twksBrightnessLabel { border: 1px solid black; background: white; padding: 6px; }\n")
+            const QString rule =
+                QStringLiteral("#twksBrightnessLabel { border: 1px solid black; background: white; padding: 6px; }\n")
                 + QStringLiteral("#gestureContainer[darkMode=true] #twksBrightnessLabel { border: 1px solid white; background: black; }\n")
                 + QStringLiteral("#twksBrightnessLabel[qApp_deviceIsTrilogy=true] { font-size: 14px; }\n")
                 + QStringLiteral("#twksBrightnessLabel[qApp_deviceIsPhoenix=true] { font-size: 17px; }\n")
                 + QStringLiteral("#twksBrightnessLabel[qApp_deviceIsDragon=true] { font-size: 25px; }\n")
                 + QStringLiteral("#twksBrightnessLabel[qApp_deviceIsStorm=true] { font-size: 29px; }\n")
-                + QStringLiteral("#twksBrightnessLabel[qApp_deviceIsDaylight=true] { font-size: 32px; }\n");
+                + QStringLiteral("#twksBrightnessLabel[qApp_deviceIsDaylight=true] { font-size: 32px; }");
 
-            return result;
+            return replaceGeneratedRule(qss, QStringLiteral("brightness-label"), rule);
         }
     }
 }

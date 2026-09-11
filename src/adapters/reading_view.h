@@ -8,6 +8,7 @@ namespace ReadingViewAdapter {
 
     public:
         explicit PageChanged(ReadingView *parent);
+        void refresh();
 
     private slots:
         void notifyPageChanged();

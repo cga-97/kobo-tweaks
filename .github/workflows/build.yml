@@ -2,8 +2,6 @@ name: Build Kobo Tweaks
 
 on:
   push:
-    branches:
-      - feature/live-settings-ui
   pull_request:
   workflow_dispatch:
 

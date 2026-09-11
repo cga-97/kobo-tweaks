@@ -208,12 +208,6 @@ struct nh_dlsym TweaksDlsym[] = {
         .optional = true,
     },
     {
-        .name     = "_ZNK12ReadingStats22currentChapterEstimateEv",
-        .out      = nh_symoutptr(ReadingStats_currentChapterEstimate),
-        .desc     = "ReadingStats::currentChapterEstimate()",
-        .optional = true,
-    },
-    {
         .name     = "_ZNK12ReadingStats18restOfBookEstimateEv",
         .out      = nh_symoutptr(ReadingStats_restOfBookEstimate),
         .desc     = "ReadingStats::restOfBookEstimate()",
@@ -266,13 +260,41 @@ struct nh_dlsym TweaksDlsym[] = {
         .optional = true,
     },
     {
-		.name = "_ZN20MainWindowController14sharedInstanceEv",
-		.out  = nh_symoutptr(MainWindowController_sharedInstance),
-	},
-	{
-		.name = "_ZNK20MainWindowController11currentViewEv",
-		.out  = nh_symoutptr(MainWindowController_currentView),
-	},
+        .name     = "_ZN20MainWindowController14sharedInstanceEv",
+        .out      = nh_symoutptr(MainWindowController_sharedInstance),
+        .desc     = "MainWindowController::sharedInstance()",
+        .optional = true,
+    },
+    {
+        .name     = "_ZNK20MainWindowController11currentViewEv",
+        .out      = nh_symoutptr(MainWindowController_currentView),
+        .desc     = "MainWindowController::currentView()",
+        .optional = true,
+    },
+    {
+        .name     = "_ZN15NickelTouchMenuC2EP7QWidget18DecorationPosition",
+        .out      = nh_symoutptr(NickelTouchMenu_constructor),
+        .desc     = "NickelTouchMenu::constructor()",
+        .optional = true,
+    },
+    {
+        .name     = "_ZN12MenuTextItemC1EP7QWidgetbb",
+        .out      = nh_symoutptr(MenuTextItem_constructor),
+        .desc     = "MenuTextItem::constructor()",
+        .optional = true,
+    },
+    {
+        .name     = "_ZN12MenuTextItem7setTextERK7QString",
+        .out      = nh_symoutptr(MenuTextItem_setText),
+        .desc     = "MenuTextItem::setText()",
+        .optional = true,
+    },
+    {
+        .name     = "_ZN12MenuTextItem22registerForTapGesturesEv",
+        .out      = nh_symoutptr(MenuTextItem_registerForTapGestures),
+        .desc     = "MenuTextItem::registerForTapGestures()",
+        .optional = true,
+    },
 
     {0},
 };

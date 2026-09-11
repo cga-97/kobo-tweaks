@@ -2,6 +2,7 @@
 #include "../utils.h"
 
 #include <QVector>
+#include <algorithm>
 
 TweaksSettings::TweaksSettings() : qSettings(DATA_DIR "/settings.ini", QSettings::IniFormat) {
     qSettings.setIniCodec("UTF-8");
@@ -150,19 +151,24 @@ QString TweaksSettings::getStringValue(const QString& key, const QString& defaul
 }
 
 void TweaksSettings::validateWidgets() {
-    // Only allow each widget to appear once
+    // Only allow each widget to appear once across all six header/footer zones.
     uint32_t seenMask = 0;
-    for (auto* zone : {&readingSettings.widgetHeaderLeft, &readingSettings.widgetHeaderRight, &readingSettings.widgetFooterLeft, &readingSettings.widgetFooterRight}) {
+    for (auto* zone : {
+        &readingSettings.widgetHeaderLeft,
+        &readingSettings.widgetHeaderCenter,
+        &readingSettings.widgetHeaderRight,
+        &readingSettings.widgetFooterLeft,
+        &readingSettings.widgetFooterCenter,
+        &readingSettings.widgetFooterRight,
+    }) {
         auto it = std::remove_if(zone->begin(), zone->end(), [&](WidgetTypeEnum w) {
-            // Map enum values to bit positions (0-31)
-            uint32_t bit = 1 << static_cast<int>(w);
+            // Map enum values to bit positions (0-31).
+            const uint32_t bit = 1u << static_cast<uint32_t>(w);
 
-            // If bit is already set, return true to remove the duplicate
             if (seenMask & bit) {
                 return true;
             }
 
-            // Otherwise, mark as seen and keep it
             seenMask |= bit;
             return false;
         });

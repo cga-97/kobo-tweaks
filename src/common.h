@@ -3,6 +3,8 @@
 
 #include <NickelHook.h>
 
+class QMenu;
+
 #ifndef ADDON_VERSION
     #define ADDON_VERSION "1.0.0"
 #endif
@@ -68,6 +70,13 @@ extern void (*BrightnessEventFilter_updateBrightnessHeader)(BrightnessEventFilte
 
 extern void* (*MainWindowController_sharedInstance)();
 extern QWidget* (*MainWindowController_currentView)(void*);
+
+// Native Nickel settings menu symbols. These are optional private Nickel APIs;
+// the menu fails gracefully when a firmware no longer exposes them.
+extern void (*NickelTouchMenu_constructor)(QMenu* self, QWidget* parent, int position);
+extern void (*MenuTextItem_constructor)(QWidget* self, QWidget* parent, bool checkable, bool italic);
+extern void (*MenuTextItem_setText)(QWidget* self, const QString& text);
+extern void (*MenuTextItem_registerForTapGestures)(QWidget* self);
 
 extern HardwareInterface* (*HardwareFactory_sharedInstance)();
 extern Device* (*Device_getCurrentDevice)();
