@@ -73,6 +73,9 @@ namespace ReadingViewHook {
     QString contentTitle;
 
     namespace {
+        const QString kHeaderLayoutName = QStringLiteral("twksHeaderLayout");
+        const QString kFooterLayoutName = QStringLiteral("twksFooterLayout");
+
         bool zonesEmpty(const QVector<WidgetTypeEnum>& left, const QVector<WidgetTypeEnum>& center, const QVector<WidgetTypeEnum>& right) {
             return left.isEmpty() && center.isEmpty() && right.isEmpty();
         }
@@ -112,7 +115,7 @@ namespace ReadingViewHook {
             view->setStyleSheet(rootQss);
         }
 
-        void clearTweaksSpacer(QWidget* spacer) {
+        void clearTweaksSpacer(QWidget* spacer, const QString& expectedLayoutName) {
             if (!spacer) {
                 return;
             }
@@ -122,11 +125,16 @@ namespace ReadingViewHook {
                 delete container;
             }
 
-            // Kobo Tweaks owns the layout it installs on topSpacer/bottomSpacer.
-            // Once the custom container is gone, remove that layout too so a new
-            // one can be installed with the updated spacer/margin settings.
+            // Never delete a layout we cannot positively identify as ours.
+            // This makes runtime reload fail safe if a future Nickel firmware
+            // or another addon starts owning topSpacer/bottomSpacer layouts.
             if (QLayout* layout = spacer->layout()) {
-                delete layout;
+                if (layout->objectName() == expectedLayoutName) {
+                    delete layout;
+                } else {
+                    nh_log("Kobo Tweaks runtime reload: refusing to delete foreign spacer layout (%s)",
+                           layout->objectName().toUtf8().constData());
+                }
             }
         }
 
@@ -136,10 +144,23 @@ namespace ReadingViewHook {
             const QString& patchedQss,
             bool header
         ) {
+            const QString layoutName = header ? kHeaderLayoutName : kFooterLayoutName;
+
+            if (QLayout* existingLayout = spacer->layout()) {
+                if (existingLayout->objectName() == layoutName) {
+                    delete existingLayout;
+                } else {
+                    nh_log("Kobo Tweaks: refusing to replace foreign spacer layout (%s)",
+                           existingLayout->objectName().toUtf8().constData());
+                    return nullptr;
+                }
+            }
+
             auto* container = new TwWidgetZonesContainer(readingSettings, patchedQss);
             container->setObjectName(header ? QStringLiteral("twksHeaderContainer") : QStringLiteral("twksFooterContainer"));
 
             auto* layout = new QHBoxLayout(spacer);
+            layout->setObjectName(layoutName);
             if (header) {
                 layout->setContentsMargins(0, readingSettings.headerSpacerHeight, 0, 0);
             } else {
@@ -204,8 +225,8 @@ namespace ReadingViewHook {
             readingSettings.widgetFooterRight
         );
 
-        clearTweaksSpacer(topSpacer);
-        clearTweaksSpacer(bottomSpacer);
+        clearTweaksSpacer(topSpacer, kHeaderLayoutName);
+        clearTweaksSpacer(bottomSpacer, kFooterLayoutName);
         applySpacerHeightQss(view, readingSettings, emptyHeader, emptyFooter, false);
 
         const QString patchedQss = makeWidgetQss(readingSettings);
@@ -351,8 +372,9 @@ namespace ReadingViewHook {
         // Save the original margin
         originalContentsMargins = margin;
 
-        QLayout* layout = self->layout();
-        layout->setContentsMargins(margin, 0, margin, 0);
+        if (QLayout* layout = self->layout()) {
+            layout->setContentsMargins(margin, 0, margin, 0);
+        }
     }
 
     namespace DogEarDelegate {
