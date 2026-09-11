@@ -1,6 +1,6 @@
 include NickelHook/NickelHook.mk
 
-override PKGCONF  += Qt5Widgets
+override PKGCONF  += Qt5Widgets Qt5Network
 override LIBRARY  := libtweaks.so
 override QRCS     += src/resources.qrc
 override CFLAGS   += -Wall -Wextra -Werror
@@ -14,7 +14,7 @@ override SOURCES += \
 	src/patches.cc \
 	src/utils.cc \
 	src/settings/settings.cc \
-	src/settings/settings_overlay.cc \
+	src/settings/settings_server.cc \
 	src/debug_utils.cc \
 	src/adapters/reading_view.cc \
 	src/hooks/reading_view.cc \
