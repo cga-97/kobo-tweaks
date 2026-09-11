@@ -1,0 +1,3 @@
+# Kobo Tweaks live settings UI
+# This file is installed separately so it does not overwrite the user's NickelMenu preset.
+menu_item :reader :Ajustes Kobo Tweaks :cmd_spawn :quiet:/bin/touch /mnt/onboard/.adds/tweaks/open-settings
