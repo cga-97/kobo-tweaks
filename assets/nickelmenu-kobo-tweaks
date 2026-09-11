@@ -1,3 +1,3 @@
-# Kobo Tweaks live settings UI
-# Uses Nickel's own modal browser so touch input is handled by Nickel.
-menu_item :reader :Ajustes Kobo Tweaks :nickel_browser :modal:http://127.0.0.1:8765/
+# Kobo Tweaks native settings UI
+# NickelMenu only drops a local trigger file; Kobo Tweaks opens a native NickelTouchMenu.
+menu_item :reader :Ajustes Kobo Tweaks :cmd_spawn :quiet:/bin/touch /mnt/onboard/.adds/tweaks/open-settings
