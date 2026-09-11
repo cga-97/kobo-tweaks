@@ -16,18 +16,17 @@
 // flash with the expensive waveform every time they update.
 //
 // We fix this by connecting to SelectionController::closeFooterMenu (the
-// canonical selection teardown signal) and clearing those attrs from the
-// ReadingView. The attrs are looked up by name via QMetaEnum so we don't
-// hardcode magic numbers that may shift between firmware versions, and the
-// whole path is gated behind Device::hasColorDisplay() so it is a no-op on
-// B&W devices.
+// canonical selection teardown signal) and clearing those attrs. The attrs
+// are looked up by name via QMetaEnum so we don't hardcode magic numbers that
+// may shift between firmware versions, and the whole path is gated behind
+// Device::hasColorDisplay() so it is a no-op on B&W devices.
 static const char* const kExtraColourAttrs[] = {
     "WA_KoboEpdUpdateModeFull",
     "WA_KoboEpdWfModeGCC16",
 };
 
-// QObject::staticQtMetaObject is protected; re-expose via a derived class
-// so we can look up Qt namespace enums by name on older Qt (pre-Q_NAMESPACE).
+// QObject::staticQtMetaObject is protected; re-expose via a derived class so
+// we can look up Qt namespace enums by name on older Qt (pre-Q_NAMESPACE).
 namespace {
 struct QtMetaAccess : QObject {
     using QObject::staticQtMetaObject;
@@ -70,11 +69,14 @@ namespace ReadingViewHook {
     static bool isDarkMode = false;
     static int originalContentsMargins = 0;
 
-    QString contentTitle;
-
     namespace {
         const QString kHeaderLayoutName = QStringLiteral("twksHeaderLayout");
         const QString kFooterLayoutName = QStringLiteral("twksFooterLayout");
+        constexpr const char* kContentTitleProperty = "twksContentTitle";
+
+        QString contentTitleFor(ReadingView* view) {
+            return view ? view->property(kContentTitleProperty).toString() : QString();
+        }
 
         bool zonesEmpty(const QVector<WidgetTypeEnum>& left, const QVector<WidgetTypeEnum>& center, const QVector<WidgetTypeEnum>& right) {
             return left.isEmpty() && center.isEmpty() && right.isEmpty();
@@ -234,6 +236,7 @@ namespace ReadingViewHook {
         TwWidgetZonesContainer* footerContainer = emptyFooter ? nullptr : installContainer(bottomSpacer, readingSettings, patchedQss, false);
 
         const int minimumSideWidth = qMax(10, originalContentsMargins - readingSettings.headerFooterMargins);
+        const QString contentTitle = contentTitleFor(view);
         if (headerContainer) {
             headerContainer->setupZones(
                 view,
@@ -258,10 +261,13 @@ namespace ReadingViewHook {
         }
 
         // Newly-created page/progress/time widgets normally get their first
-        // content on the next pageChanged signal. Invoke the existing adapter's
-        // private Qt slot through the meta-object system so the current page is
-        // populated immediately without turning a page or touching ReadingView.
-        QMetaObject::invokeMethod(adapters.pageChanged, "notifyPageChanged", Qt::QueuedConnection);
+        // content on the next pageChanged signal. Queue a typed adapter refresh
+        // so the current page is populated immediately without touching
+        // ReadingView's private Qt slots by string name.
+        auto* pageChangedAdapter = adapters.pageChanged;
+        QTimer::singleShot(0, pageChangedAdapter, [pageChangedAdapter]() {
+            pageChangedAdapter->refresh();
+        });
 
         topSpacer->updateGeometry();
         bottomSpacer->updateGeometry();
@@ -321,8 +327,10 @@ namespace ReadingViewHook {
 
         // These adapters abstract the logic and ensure that the update methods on the widgets aren't called after either the widget or the ReadingView has been destroyed
         auto renderVolumeAdapter = new ReadingViewAdapter::RenderVolume(view);
-        QObject::connect(renderVolumeAdapter, &ReadingViewAdapter::RenderVolume::renderVolume, view, [](const Volume& volume) {
-            Content_getTitle(&contentTitle, &volume);
+        QObject::connect(renderVolumeAdapter, &ReadingViewAdapter::RenderVolume::renderVolume, view, [view](const Volume& volume) {
+            QString title;
+            Content_getTitle(&title, &volume);
+            view->setProperty(kContentTitleProperty, title);
         });
 
         auto darkModeAdapter = new ReadingViewAdapter::DarkMode(gestureContainer, view);
@@ -349,7 +357,8 @@ namespace ReadingViewHook {
         QPointer<TwWidgetZonesContainer> headerGuard(headerContainer);
         QPointer<TwWidgetZonesContainer> footerGuard(footerContainer);
         QObject::connect(readerDoneLoadingAdapter, &ReadingViewAdapter::ReaderDoneLoading::readerDoneLoading, view, [view, adapters, readingSettings, headerGuard, footerGuard] {
-            int minimumSideWidth = qMax(10, originalContentsMargins - readingSettings.headerFooterMargins);
+            const int minimumSideWidth = qMax(10, originalContentsMargins - readingSettings.headerFooterMargins);
+            const QString contentTitle = contentTitleFor(view);
             if (headerGuard) {
                 headerGuard->setupZones(view, adapters, contentTitle, minimumSideWidth, readingSettings.widgetHeaderLeft, readingSettings.widgetHeaderCenter, readingSettings.widgetHeaderRight);
             }
