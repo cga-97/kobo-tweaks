@@ -1,0 +1,39 @@
+name: Build Kobo Tweaks
+
+on:
+  push:
+    branches:
+      - feature/live-settings-ui
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build KoboRoot package
+        run: |
+          docker run \
+            --volume="$PWD:$PWD" \
+            --user="$(id -u):$(id -g)" \
+            --workdir="$PWD" \
+            --env=HOME \
+            --entrypoint=make \
+            --rm \
+            ghcr.io/pgaskin/nickeltc:1.0 \
+            all koboroot
+
+      - name: Show build outputs
+        run: find . -maxdepth 3 -type f \( -name 'KoboRoot.tgz' -o -name 'libtweaks.so' \) -print
+
+      - name: Upload KoboRoot package
+        uses: actions/upload-artifact@v4
+        with:
+          name: kobo-tweaks-live-settings
+          path: KoboRoot.tgz
+          if-no-files-found: error
