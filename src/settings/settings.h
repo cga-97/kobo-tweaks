@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../common.h"
+#include "settings_keys.h"
 
 #include <QSettings>
 #include <QHash>
@@ -234,27 +235,27 @@ struct TweaksReadingSettings {
 };
 
 class TweaksSettings {
-    const char* READING_BOOKMARK_IMAGE = "Reading/BookmarkImage";
-    const char* READING_HEADER_FOOTER_HEIGHT_SCALE = "Reading/HeaderFooterHeightScale";
-    const char* READING_HEADER_FOOTER_MARGINS = "Reading/HeaderFooterMargins";
-    const char* READING_HEADER_SPACER_HEIGHT = "Reading/HeaderSpacerHeight";
-    const char* READING_FOOTER_SPACER_HEIGHT = "Reading/FooterSpacerHeight";
+    const char* READING_BOOKMARK_IMAGE = SettingsKeys::ReadingBookmarkImage;
+    const char* READING_HEADER_FOOTER_HEIGHT_SCALE = SettingsKeys::ReadingHeaderFooterHeightScale;
+    const char* READING_HEADER_FOOTER_MARGINS = SettingsKeys::ReadingHeaderFooterMargins;
+    const char* READING_HEADER_SPACER_HEIGHT = SettingsKeys::ReadingHeaderSpacerHeight;
+    const char* READING_FOOTER_SPACER_HEIGHT = SettingsKeys::ReadingFooterSpacerHeight;
 
-    const char* READING_WIDGET_HEADER_LEFT   = "Reading.Widget/HeaderLeft";
-    const char* READING_WIDGET_HEADER_CENTER = "Reading.Widget/HeaderCenter";
-    const char* READING_WIDGET_HEADER_RIGHT  = "Reading.Widget/HeaderRight";
-    const char* READING_WIDGET_FOOTER_LEFT   = "Reading.Widget/FooterLeft";
-    const char* READING_WIDGET_FOOTER_CENTER = "Reading.Widget/FooterCenter";
-    const char* READING_WIDGET_FOOTER_RIGHT  = "Reading.Widget/FooterRight";
+    const char* READING_WIDGET_HEADER_LEFT   = SettingsKeys::ReadingWidgetHeaderLeft;
+    const char* READING_WIDGET_HEADER_CENTER = SettingsKeys::ReadingWidgetHeaderCenter;
+    const char* READING_WIDGET_HEADER_RIGHT  = SettingsKeys::ReadingWidgetHeaderRight;
+    const char* READING_WIDGET_FOOTER_LEFT   = SettingsKeys::ReadingWidgetFooterLeft;
+    const char* READING_WIDGET_FOOTER_CENTER = SettingsKeys::ReadingWidgetFooterCenter;
+    const char* READING_WIDGET_FOOTER_RIGHT  = SettingsKeys::ReadingWidgetFooterRight;
 
-    const char* READING_WIDGET_SEPARATOR = "Reading.Widget/Separator";
-    const char* READING_WIDGET_SPACING   = "Reading.Widget/Spacing";
+    const char* READING_WIDGET_SEPARATOR = SettingsKeys::ReadingWidgetSeparator;
+    const char* READING_WIDGET_SPACING   = SettingsKeys::ReadingWidgetSpacing;
 
-    const char* READING_WIDGET_BATTERY_STYLE           = "Reading.Widget.Battery/Style";
-    const char* READING_WIDGET_BATTERY_STYLE_CHARGING  = "Reading.Widget.Battery/StyleCharging";
-    const char* READING_WIDGET_BATTERY_SHOW_WHEN_BELOW = "Reading.Widget.Battery/ShowWhenBelow";
+    const char* READING_WIDGET_BATTERY_STYLE           = SettingsKeys::ReadingWidgetBatteryStyle;
+    const char* READING_WIDGET_BATTERY_STYLE_CHARGING  = SettingsKeys::ReadingWidgetBatteryStyleCharging;
+    const char* READING_WIDGET_BATTERY_SHOW_WHEN_BELOW = SettingsKeys::ReadingWidgetBatteryShowWhenBelow;
 
-    const char* READING_WIDGET_CLOCK_24H_FORMAT = "Reading.Widget.Clock/24hFormat";
+    const char* READING_WIDGET_CLOCK_24H_FORMAT = SettingsKeys::ReadingWidgetClock24hFormat;
 
     public:
         QString getReadingBookmarkImage(bool isDarkMode);
