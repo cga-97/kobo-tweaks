@@ -8,6 +8,10 @@ namespace ReadingViewAdapter {
         }
     }
 
+    void PageChanged::refresh() {
+        notifyPageChanged();
+    }
+
     void PageChanged::notifyPageChanged() {
         // nh_log("page changed");
         pageChanged();
