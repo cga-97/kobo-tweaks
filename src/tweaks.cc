@@ -55,8 +55,8 @@ int tweaksInit() {
     }
 
     // Migrate settings
-    TweaksSettings* tweaksSettings = new TweaksSettings();
-    tweaksSettings->migrate();
+    TweaksSettings tweaksSettings;
+    tweaksSettings.migrate();
 
     return 0;
 }
@@ -119,9 +119,9 @@ struct nh_hook TweaksHook[] = {
     // Kepub
     {
         .sym      = "_ZN14DogEarDelegateC2EP7QWidgetRK7QString",
-        .sym_new  = "hook_DogEarDelegate_constructor",
+        .sym_new  = "hook_KepubDogEarDelegate_constructor",
         .lib      = "libnickel.so.1.0.0",
-        .out      = nh_symoutptr(DogEarDelegate_constructor),
+        .out      = nh_symoutptr(KepubDogEarDelegate_constructor),
         .desc     = "Kepub DogEarDelegate::constructor()",
         .optional = true,
     },
@@ -137,9 +137,9 @@ struct nh_hook TweaksHook[] = {
     // CBZ
     {
         .sym      = "_ZN14DogEarDelegateC2EP7QWidgetRK7QString",
-        .sym_new  = "hook_DogEarDelegate_constructor",
+        .sym_new  = "hook_CbzDogEarDelegate_constructor",
         .lib      = "libcb.so",
-        .out      = nh_symoutptr(DogEarDelegate_constructor),
+        .out      = nh_symoutptr(CbzDogEarDelegate_constructor),
         .desc     = "CBZ DogEarDelegate::constructor()",
         .optional = true,
     },
@@ -309,8 +309,8 @@ NickelHook(
 
 // HOOKS
 extern "C" __attribute__((visibility("default")))
-void hook_ReadingView_constructor(ReadingView* self) {
-    ReadingViewHook::constructor(self);
+void hook_ReadingView_constructor(ReadingView* self, QWidget* parent) {
+    ReadingViewHook::constructor(self, parent);
 
     if (hasNickelClock && ConfirmationDialogFactory_showOKDialog) {
         // Show a dialog prompting the user to reboot their device
@@ -331,18 +331,27 @@ void hook_ReadingFooter_setFooterMargin(QWidget* self, int margin) {
 }
 
 extern "C" __attribute__((visibility("default")))
-void hook_DogEarDelegate_constructor(QWidget* self, QWidget* parent, const QString& image) {
-    ReadingViewHook::DogEarDelegate::constructor(self, parent, image);
+void hook_KepubDogEarDelegate_constructor(QWidget* self, QWidget* parent, const QString& image) {
+    ReadingViewHook::DogEarDelegate::constructor(self, parent, image, KepubDogEarDelegate_constructor);
+}
+
+extern "C" __attribute__((visibility("default")))
+void hook_CbzDogEarDelegate_constructor(QWidget* self, QWidget* parent, const QString& image) {
+    ReadingViewHook::DogEarDelegate::constructor(self, parent, image, CbzDogEarDelegate_constructor);
 }
 
 extern "C" __attribute__((visibility("default")))
 void hook_SearchAutoCompleteController_handleSpecialCommands(SearchAutoCompleteController* self, const QString& command) {
     if (command.compare("kt ", Qt::CaseInsensitive) == 0 || command.compare("kobotweaks ", Qt::CaseInsensitive) == 0) {
-        ConfirmationDialogFactory_showOKDialog(QLatin1String("KoboTweaks"), QLatin1String("!!!"));
+        if (ConfirmationDialogFactory_showOKDialog) {
+            ConfirmationDialogFactory_showOKDialog(QLatin1String("KoboTweaks"), QLatin1String("!!!"));
+        }
         return;
     }
 
-    SearchAutoCompleteController_handleSpecialCommands(self, command);
+    if (SearchAutoCompleteController_handleSpecialCommands) {
+        SearchAutoCompleteController_handleSpecialCommands(self, command);
+    }
 }
 
 extern "C" __attribute__((visibility("default")))

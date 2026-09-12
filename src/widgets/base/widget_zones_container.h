@@ -37,30 +37,31 @@ public:
             return;
         }
 
-        TwWidgetZone* leftZone = new TwWidgetZone(readingSettings, readingView, adapters, contentTitle, leftWidgets);
-        TwWidgetZone* centerZone = new TwWidgetZone(readingSettings, readingView, adapters, contentTitle, centerWidgets);
-        TwWidgetZone* rightZone = new TwWidgetZone(readingSettings, readingView, adapters, contentTitle, rightWidgets, true);
-
         // 2. Only Left
         if (hasLeft && !hasCenter && !hasRight) {
+            TwWidgetZone* leftZone = new TwWidgetZone(readingSettings, readingView, adapters, contentTitle, leftWidgets);
             lay->addWidget(leftZone, 1, Qt::AlignLeft);
             return;
         }
 
         // 3. Only Center
         if (!hasLeft && hasCenter && !hasRight) {
+            TwWidgetZone* centerZone = new TwWidgetZone(readingSettings, readingView, adapters, contentTitle, centerWidgets);
             lay->addWidget(centerZone, 1, Qt::AlignCenter);
             return;
         }
 
         // 4. Only Right
         if (!hasLeft && !hasCenter && hasRight) {
+            TwWidgetZone* rightZone = new TwWidgetZone(readingSettings, readingView, adapters, contentTitle, rightWidgets, true);
             lay->addWidget(rightZone, 1, Qt::AlignRight);
             return;
         }
 
         // 5. Left + Right, no Center
         if (hasLeft && !hasCenter && hasRight) {
+            TwWidgetZone* leftZone = new TwWidgetZone(readingSettings, readingView, adapters, contentTitle, leftWidgets);
+            TwWidgetZone* rightZone = new TwWidgetZone(readingSettings, readingView, adapters, contentTitle, rightWidgets, true);
             lay->addWidget(leftZone, 0, Qt::AlignLeft);
             lay->addStretch(0);
             lay->addWidget(rightZone, 0, Qt::AlignRight);
@@ -69,6 +70,9 @@ public:
 
         // 6. Center and either Left/Right or both
         if (hasCenter) {
+            TwWidgetZone* leftZone = new TwWidgetZone(readingSettings, readingView, adapters, contentTitle, leftWidgets);
+            TwWidgetZone* centerZone = new TwWidgetZone(readingSettings, readingView, adapters, contentTitle, centerWidgets);
+            TwWidgetZone* rightZone = new TwWidgetZone(readingSettings, readingView, adapters, contentTitle, rightWidgets, true);
             lay->addWidget(leftZone, 0, Qt::AlignLeft);
             lay->addWidget(centerZone, 1, Qt::AlignCenter);
             lay->addWidget(rightZone, 0, Qt::AlignRight);

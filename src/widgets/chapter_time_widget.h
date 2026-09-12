@@ -15,7 +15,7 @@ public:
     TwChapterTimeWidget(ReadingView* rdv, ReadingViewAdapters adapters, TwChapterTimeConfig config, QWidget* parent = nullptr) : TwIconLabel(rdv, adapters, config, parent) {}
 
     void onPageChanged() override {
-        if (!ReadingView_hasValidReadingStats || !ReadingView_readingStats || !ReadingStats_currentChapterEstimate || !ReadingView_chapterCurrentPage || !ReadingView_chapterTotalPages) {
+        if (!ReadingView_hasValidReadingStats || !ReadingView_readingStats || !ReadingStats_currentChapterEstimate || !ReadingStats_deconstructor || !ReadingView_chapterCurrentPage || !ReadingView_chapterTotalPages) {
             return;
         }
 

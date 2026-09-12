@@ -61,12 +61,12 @@ public:
             nh_log("%s", "Unable to get derived HardwareInterface::chargingState() method");
         }
 
-        iconLabel = new QLabel();
+        iconLabel = new QLabel(this);
         iconLabel->setContentsMargins(0, 0, 0, 0);
         iconLabel->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
         // iconLabel->setStyleSheet("border: 1px solid black;");
 
-        levelLabel = new QLabel();
+        levelLabel = new QLabel(this);
         levelLabel->setObjectName(QStringLiteral("twksLabel"));
         levelLabel->setContentsMargins(0, 0, 0, 0);
         levelLabel->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
@@ -103,7 +103,7 @@ private:
         struct VPtr {
             uintptr_t** v;
         };
-        if (!HWInterfaceFunc) {
+        if (!hw || !HWInterfaceFunc || !HardwareInterface_vtable) {
             return nullptr;
         }
         // The list of method pointers starts from the third entry
@@ -190,8 +190,6 @@ private:
 
     void refreshStyle() {
         // Delete old layout
-        iconLabel->setParent(nullptr);
-        levelLabel->setParent(nullptr);
         QLayout* oldLayout = layout();
         if (oldLayout) {
             setLayout(nullptr);

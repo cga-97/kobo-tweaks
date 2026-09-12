@@ -15,7 +15,7 @@ public:
     TwBookTimeWidget(ReadingView* rdv, ReadingViewAdapters adapters, TwBookTimeConfig config, QWidget* parent = nullptr) : TwIconLabel(rdv, adapters, config, parent) {}
 
     void onPageChanged() override {
-        if (!ReadingView_hasValidReadingStats || !ReadingView_readingStats || !ReadingStats_restOfBookEstimate || !ReadingView_fullBookCurrentPage || !ReadingView_fullBookTotalPages) {
+        if (!ReadingView_hasValidReadingStats || !ReadingView_readingStats || !ReadingStats_restOfBookEstimate || !ReadingStats_deconstructor || !ReadingView_fullBookCurrentPage || !ReadingView_fullBookTotalPages) {
             return;
         }
 

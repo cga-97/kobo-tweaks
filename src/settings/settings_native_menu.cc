@@ -31,6 +31,7 @@ typedef QMenu NickelTouchMenu;
 
 QFileSystemWatcher* gWatcher = nullptr;
 bool gMissingSymbolsReported = false;
+bool gRuntimeReloadPending = false;
 
 struct WidgetChoice {
     WidgetTypeEnum value;
@@ -124,7 +125,10 @@ void addItem(NickelTouchMenu* menu, const QString& label, const std::function<vo
     action->setEnabled(true);
     menu->addAction(action);
 
-    QObject::connect(mti, SIGNAL(tapped(bool)), action, SIGNAL(triggered()));
+    if (!QObject::connect(mti, SIGNAL(tapped(bool)), action, SIGNAL(triggered()))) {
+        nh_log("Kobo Tweaks settings menu: could not connect MenuTextItem::tapped");
+        action->setEnabled(false);
+    }
     QObject::connect(action, &QAction::triggered, menu, &QMenu::hide);
     QObject::connect(action, &QAction::triggered, [callback](bool) { callback(); });
 
@@ -147,7 +151,13 @@ int readInt(const QString& key, int fallback) {
 }
 
 bool readBool(const QString& key, bool fallback) {
-    return readValue(key, fallback).toBool();
+    const QVariant value = readValue(key, fallback);
+    if (value.type() == QVariant::String) {
+        const QString normalized = value.toString().trimmed().toLower();
+        if (normalized == QStringLiteral("on")) return true;
+        if (normalized == QStringLiteral("off")) return false;
+    }
+    return value.toBool();
 }
 
 QString readString(const QString& key, const QString& fallback) {
@@ -170,35 +180,46 @@ void scheduleRuntimeReload() {
     // Run after the current Nickel menu action returns. This keeps menu gesture
     // handling isolated from the reader widget rebuild while still making the
     // change visible before the submenu is reopened.
+    if (gRuntimeReloadPending) {
+        return;
+    }
+    gRuntimeReloadPending = true;
     QTimer::singleShot(0, []() {
+        gRuntimeReloadPending = false;
         ReadingViewHook::reloadWidgets();
     });
 }
 
-void writeValue(const QString& key, const QVariant& value) {
+bool writeValue(const QString& key, const QVariant& value) {
     QSettings s(QString::fromLatin1(kSettingsPath), QSettings::IniFormat);
     s.setIniCodec("UTF-8");
     s.setValue(key, value);
     s.sync();
+    if (s.status() != QSettings::NoError) {
+        nh_log("Kobo Tweaks settings menu: failed to persist '%s' (QSettings status %d)",
+               key.toUtf8().constData(), static_cast<int>(s.status()));
+        return false;
+    }
     scheduleRuntimeReload();
+    return true;
 }
 
-void writeInt(const QString& key, int value) {
-    writeValue(key, value);
+bool writeInt(const QString& key, int value) {
+    return writeValue(key, value);
 }
 
-void writeBool(const QString& key, bool value) {
-    writeValue(key, value);
+bool writeBool(const QString& key, bool value) {
+    return writeValue(key, value);
 }
 
-void writeString(const QString& key, const QString& value) {
-    writeValue(key, value);
+bool writeString(const QString& key, const QString& value) {
+    return writeValue(key, value);
 }
 
-void writeStringList(const QString& key, const QStringList& values) {
+bool writeStringList(const QString& key, const QStringList& values) {
     // Kobo Tweaks deliberately stores an empty zone as an empty string instead
     // of an empty QStringList, which QSettings may serialize as @Invalid().
-    writeValue(key, values.isEmpty() ? QVariant(QString()) : QVariant(values));
+    return writeValue(key, values.isEmpty() ? QVariant(QString()) : QVariant(values));
 }
 
 bool containsIgnoreCase(const QStringList& values, const QString& needle) {
@@ -241,7 +262,7 @@ QString zoneSummary(const QString& key) {
     return labels.join(QStringLiteral(" · "));
 }
 
-void toggleWidgetInZone(const QString& targetKey, const QString& widget) {
+bool toggleWidgetInZone(const QString& targetKey, const QString& widget) {
     QSettings s(QString::fromLatin1(kSettingsPath), QSettings::IniFormat);
     s.setIniCodec("UTF-8");
     s.sync();
@@ -273,7 +294,13 @@ void toggleWidgetInZone(const QString& targetKey, const QString& widget) {
     }
 
     s.sync();
+    if (s.status() != QSettings::NoError) {
+        nh_log("Kobo Tweaks settings menu: failed to persist widget zones (QSettings status %d)",
+               static_cast<int>(s.status()));
+        return false;
+    }
     scheduleRuntimeReload();
+    return true;
 }
 
 BatteryStyleEnum nextBatteryStyle(BatteryStyleEnum current) {

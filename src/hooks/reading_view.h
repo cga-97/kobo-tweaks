@@ -9,7 +9,7 @@
 
 
 namespace ReadingViewHook {
-    void constructor(ReadingView* self);
+    void constructor(ReadingView* self, QWidget* parent);
     void setFooterMargin(QWidget* self, int margin);
 
     // Reload Kobo Tweaks' header/footer widgets from settings.ini without
@@ -18,7 +18,8 @@ namespace ReadingViewHook {
     bool reloadWidgets();
 
     namespace DogEarDelegate {
-        void constructor(QWidget* self, QWidget* parent, const QString& image);
+        using Constructor = void (*)(QWidget* self, QWidget* parent, const QString& image);
+        void constructor(QWidget* self, QWidget* parent, const QString& image, Constructor original);
     }
 
     namespace AdobeReader {

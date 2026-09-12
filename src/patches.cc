@@ -14,9 +14,15 @@ namespace {
         while (start >= 0) {
             const int endPos = qss.indexOf(end, start);
             if (endPos < 0) {
-                break;
+                nh_log("Kobo Tweaks QSS: incomplete generated rule '%s'; leaving stylesheet unchanged", id.toUtf8().constData());
+                return qss;
             }
 
+            // Include the separator inserted before the previous generated
+            // block so a live reload replaces the whole owned block exactly.
+            if (start > 0 && qss.at(start - 1) == QLatin1Char('\n')) {
+                --start;
+            }
             int removeEnd = endPos + end.size();
             if (removeEnd < qss.size() && qss.at(removeEnd) == QLatin1Char('\n')) {
                 ++removeEnd;
@@ -25,7 +31,10 @@ namespace {
             start = qss.indexOf(begin);
         }
 
-        qss.append(QStringLiteral("\n%1\n%2\n%3\n").arg(begin, rule, end));
+        if (!qss.isEmpty() && !qss.endsWith(QLatin1Char('\n'))) {
+            qss.append(QLatin1Char('\n'));
+        }
+        qss.append(QStringLiteral("%1\n%2\n%3\n").arg(begin, rule, end));
         return qss;
     }
 }

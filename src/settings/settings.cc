@@ -84,11 +84,17 @@ void TweaksSettings::loadReadingSettings() {
     validateWidgets();
 }
 
-void TweaksSettings::load() {
+bool TweaksSettings::load() {
     qSettings.sync();
+    if (qSettings.status() != QSettings::NoError) {
+        nh_log("Kobo Tweaks settings: failed to read settings.ini (QSettings status %d)",
+               static_cast<int>(qSettings.status()));
+        return false;
+    }
     setMissingKeys();
 
     loadReadingSettings();
+    return true;
 }
 
 void TweaksSettings::sync() {
@@ -117,6 +123,10 @@ void TweaksSettings::sync() {
     qSettings.setValue(READING_WIDGET_SPACING, readingSettings.widgetSpacing);
 
     qSettings.sync();
+    if (qSettings.status() != QSettings::NoError) {
+        nh_log("Kobo Tweaks settings: failed to write settings.ini (QSettings status %d)",
+               static_cast<int>(qSettings.status()));
+    }
 }
 
 QString TweaksSettings::getReadingBookmarkImage(bool isDarkMode) {
@@ -200,4 +210,8 @@ void TweaksSettings::migrate() {
     }
 
     qSettings.sync();
+    if (qSettings.status() != QSettings::NoError) {
+        nh_log("Kobo Tweaks settings: failed to migrate settings.ini (QSettings status %d)",
+               static_cast<int>(qSettings.status()));
+    }
 }

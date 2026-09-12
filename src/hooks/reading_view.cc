@@ -213,7 +213,10 @@ namespace ReadingViewHook {
         // Re-read the INI but do not recreate ReadingView. Existing widget
         // signal connections disappear automatically when their receivers are
         // deleted below; the long-lived adapters remain attached to Nickel.
-        settings.load();
+        if (!settings.load()) {
+            nh_log("Kobo Tweaks runtime reload: settings unavailable");
+            return false;
+        }
         const TweaksReadingSettings readingSettings = settings.getReadingSettings();
 
         const bool emptyHeader = zonesEmpty(
@@ -279,12 +282,24 @@ namespace ReadingViewHook {
         return true;
     }
 
-    void constructor(ReadingView* view) {
+    void constructor(ReadingView* view, QWidget* parent) {
         // Must parse settings before constructor since other widgets use them
-        settings.load();
-        settings.sync();
+        const bool settingsLoaded = settings.load();
 
-        ReadingView_constructor(view);
+        if (!ReadingView_constructor) {
+            nh_log("ReadingView constructor hook: original constructor unavailable");
+            return;
+        }
+        ReadingView_constructor(view, parent);
+
+        // Never overwrite a settings file that QSettings could not read.
+        // The original reader remains fully functional; only Tweaks UI is
+        // disabled for this ReadingView.
+        if (!settingsLoaded) {
+            nh_log("Kobo Tweaks: settings unavailable; skipping reader UI setup");
+            return;
+        }
+        settings.sync();
 
         // MUST NOT KEEP REFS TO THE WIDGETS, AS WE DON'T CONTROL THE LIFETIME
 
@@ -328,6 +343,10 @@ namespace ReadingViewHook {
         // These adapters abstract the logic and ensure that the update methods on the widgets aren't called after either the widget or the ReadingView has been destroyed
         auto renderVolumeAdapter = new ReadingViewAdapter::RenderVolume(view);
         QObject::connect(renderVolumeAdapter, &ReadingViewAdapter::RenderVolume::renderVolume, view, [view](const Volume& volume) {
+            if (!Content_getTitle) {
+                nh_log("Content::getTitle unavailable; skipping book title update");
+                return;
+            }
             QString title;
             Content_getTitle(&title, &volume);
             view->setProperty(kContentTitleProperty, title);
@@ -387,13 +406,17 @@ namespace ReadingViewHook {
     }
 
     namespace DogEarDelegate {
-        void constructor(QWidget* self, QWidget* parent, const QString& orgImgPath) {
+        void constructor(QWidget* self, QWidget* parent, const QString& orgImgPath, Constructor original) {
+            if (!original) {
+                nh_log("DogEarDelegate constructor unavailable; leaving bookmark unchanged");
+                return;
+            }
             QString imgPath = settings.getReadingBookmarkImage(isDarkMode);
             if (imgPath.isEmpty()) {
                 imgPath = orgImgPath;
             }
 
-            DogEarDelegate_constructor(self, parent, imgPath);
+            original(self, parent, imgPath);
         }
     }
 
@@ -417,8 +440,17 @@ namespace ReadingViewHook {
             }
 
             // Find QLabel
+            if (!MainWindowController_sharedInstance || !MainWindowController_currentView) {
+                return nullptr;
+            }
             void* mwc = MainWindowController_sharedInstance();
+            if (!mwc) {
+                return nullptr;
+            }
             QWidget* view = MainWindowController_currentView(mwc);
+            if (!view) {
+                return nullptr;
+            }
             QWidget* gestureContainer = view->findChild<GestureReceivingContainer*>(QStringLiteral("gestureContainer"), Qt::FindDirectChildrenOnly);
             if (!gestureContainer) {
                 return nullptr;

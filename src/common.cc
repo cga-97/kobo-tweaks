@@ -1,6 +1,6 @@
 #include "common.h"
 
-void (*ReadingView_constructor)(ReadingView* self) = nullptr;
+void (*ReadingView_constructor)(ReadingView* self, QWidget* parent) = nullptr;
 void (*ReadingView_getChapterTitle)(QString* result, ReadingView* self) = nullptr;
 int (*ReadingView_chapterCurrentPage)(ReadingView* self) = nullptr;
 int (*ReadingView_chapterTotalPages)(ReadingView* self) = nullptr;
@@ -22,7 +22,8 @@ void (*ReadingView_pageChanged)(ReadingView* self, int pageIndex) = nullptr;
 void (*SearchAutoCompleteController_handleSpecialCommands)(SearchAutoCompleteController* self, const QString& command) = nullptr;
 
 void (*ConfirmationDialogFactory_showOKDialog)(const QString& title, const QString& body) = nullptr;
-void (*DogEarDelegate_constructor)(QWidget* self, QWidget* parent, const QString& image) = nullptr;
+void (*KepubDogEarDelegate_constructor)(QWidget* self, QWidget* parent, const QString& image) = nullptr;
+void (*CbzDogEarDelegate_constructor)(QWidget* self, QWidget* parent, const QString& image) = nullptr;
 void (*BrightnessEventFilter_updateBrightnessHeader)(BrightnessEventFilter* self, const QString& text, const QString& sth) = nullptr;
 
 void* (*MainWindowController_sharedInstance)() = nullptr;

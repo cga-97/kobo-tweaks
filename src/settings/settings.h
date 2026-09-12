@@ -263,7 +263,7 @@ class TweaksSettings {
 
         TweaksSettings();
         void sync();
-        void load();
+        bool load();
         void migrate();
 
     private:

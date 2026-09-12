@@ -45,7 +45,7 @@ class Shortcover : public Content { public: virtual ~Shortcover() {} };
 using GetBatteryLevelFn = int(*)(HardwareInterface*);
 using ChargingStateFn = uint(*)(HardwareInterface*);
 
-extern void (*ReadingView_constructor)(ReadingView* self);
+extern void (*ReadingView_constructor)(ReadingView* self, QWidget* parent);
 extern void (*ReadingView_getChapterTitle)(QString* result, ReadingView* self);
 extern int (*ReadingView_chapterCurrentPage)(ReadingView* self);
 extern int (*ReadingView_chapterTotalPages)(ReadingView* self);
@@ -65,7 +65,8 @@ extern int (*ReadingSettings_getChapterProgressType)(ReadingSettings* self);
 extern void (*ReadingFooter_setFooterMargin)(QWidget* self, int margin);
 extern void (*SearchAutoCompleteController_handleSpecialCommands)(SearchAutoCompleteController* self, const QString& command);
 extern void (*ConfirmationDialogFactory_showOKDialog)(const QString& title, const QString& body);
-extern void (*DogEarDelegate_constructor)(QWidget* self, QWidget* parent, const QString& image);
+extern void (*KepubDogEarDelegate_constructor)(QWidget* self, QWidget* parent, const QString& image);
+extern void (*CbzDogEarDelegate_constructor)(QWidget* self, QWidget* parent, const QString& image);
 extern void (*BrightnessEventFilter_updateBrightnessHeader)(BrightnessEventFilter* self, const QString& text, const QString& sth);
 
 extern void* (*MainWindowController_sharedInstance)();
