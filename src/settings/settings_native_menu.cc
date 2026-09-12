@@ -5,6 +5,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QCoreApplication>
+#include <QDir>
 #include <QFile>
 #include <QFileSystemWatcher>
 #include <QMenu>
@@ -25,13 +26,21 @@ constexpr const char* kTriggerPath = DATA_DIR "/open-settings";
 constexpr const char* kSettingsPath = DATA_DIR "/settings.ini";
 constexpr int kSubmenuDelayMs = 120;
 constexpr int kNickelMenuCloseDelayMs = 300;
+// /mnt/onboard disappears while Kobo USB mass storage is active. Retry once
+// quickly after it returns, then back off so a genuinely unavailable storage
+// volume cannot cause a continuous wakeup/IO loop.
+constexpr int kWatcherRecoveryInitialDelayMs = 1000;
+constexpr int kWatcherRecoveryMaxDelayMs = 30000;
 
 typedef QWidget MenuTextItem;
 typedef QMenu NickelTouchMenu;
 
 QFileSystemWatcher* gWatcher = nullptr;
+QTimer* gWatcherRecoveryTimer = nullptr;
 bool gMissingSymbolsReported = false;
 bool gRuntimeReloadPending = false;
+bool gWatcherPathWasMissing = false;
+int gWatcherRecoveryDelayMs = kWatcherRecoveryInitialDelayMs;
 
 struct WidgetChoice {
     WidgetTypeEnum value;
@@ -536,19 +545,103 @@ void consumeTrigger() {
     QTimer::singleShot(kNickelMenuCloseDelayMs, []() { showMainMenu(); });
 }
 
-void installWatcher() {
-    if (gWatcher || !QCoreApplication::instance()) {
+void retryWatcherPath();
+
+void scheduleWatcherRecovery() {
+    QCoreApplication* app = QCoreApplication::instance();
+    if (!app) {
         return;
     }
 
-    gWatcher = new QFileSystemWatcher(QCoreApplication::instance());
-    gWatcher->addPath(QStringLiteral(DATA_DIR));
-    QObject::connect(gWatcher, &QFileSystemWatcher::directoryChanged, QCoreApplication::instance(), [](const QString&) {
-        consumeTrigger();
-    });
+    if (!gWatcherRecoveryTimer) {
+        gWatcherRecoveryTimer = new QTimer(app);
+        gWatcherRecoveryTimer->setSingleShot(true);
+        QObject::connect(gWatcherRecoveryTimer, &QTimer::timeout, app, []() {
+            retryWatcherPath();
+        });
+    }
 
-    consumeTrigger();
-    nh_log("Kobo Tweaks native settings menu watcher installed");
+    if (gWatcherRecoveryTimer->isActive()) {
+        return;
+    }
+
+    gWatcherRecoveryTimer->start(gWatcherRecoveryDelayMs);
+    gWatcherRecoveryDelayMs = qMin(kWatcherRecoveryMaxDelayMs, gWatcherRecoveryDelayMs * 2);
+}
+
+void clearWatcherRecovery() {
+    if (gWatcherRecoveryTimer) {
+        gWatcherRecoveryTimer->stop();
+    }
+    if (gWatcherPathWasMissing) {
+        nh_log("Kobo Tweaks settings menu: data directory watch restored");
+    }
+    gWatcherPathWasMissing = false;
+    gWatcherRecoveryDelayMs = kWatcherRecoveryInitialDelayMs;
+}
+
+bool ensureWatcherPath() {
+    if (!gWatcher) {
+        return false;
+    }
+
+    const QString dataDir = QStringLiteral(DATA_DIR);
+    const bool watched = gWatcher->directories().contains(dataDir);
+    if (watched && QDir(dataDir).exists()) {
+        clearWatcherRecovery();
+        return true;
+    }
+
+    if (watched) {
+        // QFSWatcher may still report a stale path while delivering the
+        // removal notification. Best-effort removal makes the re-add below
+        // independent of that event ordering.
+        gWatcher->removePath(dataDir);
+    }
+
+    // QFileSystemWatcher stops monitoring a directory once it is removed.
+    // This happens when /mnt/onboard is exported over USB, so add the path
+    // again after the storage volume returns.
+    if (!gWatcher->addPath(dataDir)) {
+        if (!gWatcherPathWasMissing) {
+            nh_log("Kobo Tweaks settings menu: data directory watch unavailable; retrying after storage returns");
+            gWatcherPathWasMissing = true;
+        }
+        scheduleWatcherRecovery();
+        return false;
+    }
+
+    clearWatcherRecovery();
+    return true;
+}
+
+void retryWatcherPath() {
+    if (ensureWatcherPath()) {
+        // A trigger created immediately after USB disconnect may already be
+        // present when the watch is restored.
+        consumeTrigger();
+    }
+}
+
+void installWatcher() {
+    QCoreApplication* app = QCoreApplication::instance();
+    if (!app) {
+        return;
+    }
+
+    if (!gWatcher) {
+        gWatcher = new QFileSystemWatcher(app);
+        QObject::connect(gWatcher, &QFileSystemWatcher::directoryChanged, app, [](const QString&) {
+            // If the directory was unmounted, avoid touching /mnt/onboard
+            // until the watch has been restored successfully.
+            retryWatcherPath();
+        });
+    }
+
+    if (ensureWatcherPath()) {
+        consumeTrigger();
+        nh_log("Kobo Tweaks native settings menu watcher installed");
+    }
 }
 
 struct NativeMenuBootstrap {
