@@ -1,4 +1,5 @@
 #include "patches.h"
+#include "common.h"
 #include "utils.h"
 #include <QString>
 #include <QVariant>
